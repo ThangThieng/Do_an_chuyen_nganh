@@ -32,7 +32,7 @@ export default function LoginPage() {
     <div className="login-page">
       <Card className="login-card" variant="borderless">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-          <span className="app-logo-mark" style={{ color: "#fff" }} aria-hidden>📊</span>
+          <span className="app-logo-mark" aria-hidden />
           <Typography.Title level={3} style={{ margin: 0 }}>LMS Analytics</Typography.Title>
         </div>
         <Typography.Paragraph type="secondary">

@@ -48,7 +48,7 @@ export function StudentCompareChart({ metrics }) {
   );
 }
 
-/** Lượt xem & thao tác theo tuần; điểm trên đường: ● có mặt đủ các buổi trong tuần, ○ có buổi vắng, không điểm = tuần không điểm danh. */
+/** Lượt xem & thao tác theo tuần; điểm trên đường: tô đặc = có mặt đủ các buổi trong tuần, rỗng = có buổi vắng, không điểm = tuần không điểm danh. */
 export function WeeklyActivityChart({ weeks }) {
   const { data, options } = useMemo(() => ({
     data: {
@@ -89,8 +89,8 @@ export function WeeklyActivityChart({ weeks }) {
         <Line data={data} options={options} plugins={[crosshair]} role="img" aria-label="Hoạt động theo tuần" />
       </div>
       <div className="legend-row" style={{ marginTop: 6 }}>
-        <span><span aria-hidden style={{ color: SERIES.blue }}>●</span> có mặt đủ buổi học trong tuần</span>
-        <span><span aria-hidden style={{ color: SERIES.blue }}>○</span> có buổi vắng</span>
+        <span><span className="dot-key" aria-hidden style={{ background: SERIES.blue, borderColor: SERIES.blue }} />có mặt đủ buổi học trong tuần</span>
+        <span><span className="dot-key" aria-hidden style={{ background: "#fff", borderColor: SERIES.blue }} />có buổi vắng</span>
       </div>
     </>
   );

@@ -1,0 +1,25 @@
+@startuml uc_giang_vien
+!include _style.iuml
+left to right direction
+actor "Giảng viên" as GV
+rectangle "Phân hệ Giảng viên" {
+  usecase "Chọn môn học phụ trách" as CM
+  usecase "UC12 Xem cảnh báo\nsinh viên nguy cơ" as UC12
+  usecase "Lọc theo mức rủi ro / tiêu chí" as UC12a
+  usecase "UC13 Xem chi tiết sinh viên" as UC13
+  usecase "UC14 Ghi nhận can thiệp" as UC14
+  usecase "UC15 Xuất danh sách cảnh báo" as UC15
+  usecase "UC16 Xem tiến độ lớp" as UC16
+  usecase "UC01 Đăng nhập" as UC01
+}
+GV --> UC12
+GV --> UC16
+GV --> UC15
+UC12 ..> CM : <<include>>
+UC16 ..> CM : <<include>>
+UC15 ..> CM : <<include>>
+UC12a .> UC12 : <<extend>>
+UC13 .> UC12 : <<extend>>\n(nhấn "Chi tiết")
+UC14 .> UC13 : <<extend>>\n(chọn hành động)
+CM ..> UC01 : <<include>>
+@enduml

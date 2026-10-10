@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 
 import pandas as pd
 
+from common.settings import TZ
 from etl.extract.course_data import CourseDataset
 from etl.transform.semester import academic_term
 from etl.transform.student_risk import percent
@@ -17,16 +19,18 @@ PROGRESS_COLUMNS = (
     "active_students_day", "active_students_7d", "total_active_students", "total_views_day",
     "total_actions_day", "submissions_day", "total_assignments", "assignment_submission_rate",
     "attendance_rate", "avg_completion_rate", "avg_access_per_student", "red_count", "yellow_count",
-    "green_count", "section_progress", "etl_run_id",
+    "green_count", "section_progress", "rule_set_id", "editing_teacher_ids", "course_start_date", "etl_run_id",
 )
 
 
 def build_progress_rows(ds: CourseDataset, metrics: pd.DataFrame,
-                        risk_counts: Mapping[int, tuple[int, int, int]], run_id: int) -> list[dict]:
+                        risk_counts: Mapping[int, tuple[int, int, int]], run_id: int,
+                        rule_of: Mapping[int, int] | None = None) -> list[dict]:
     """
     metrics: kết quả student_metrics(ds). risk_counts: course_id -> (red, yellow, green) từ snapshot rủi ro
-    mới nhất không muộn hơn ngày thống kê.
+    mới nhất không muộn hơn ngày thống kê. rule_of: course_id -> rule_set_id của snapshot đó (vạch đổi luật).
     """
+    rule_of = rule_of or {}
     stat_date = ds.as_of.date()
     submissions_day = dict(zip(ds.submissions_day["course_id"].astype(int), ds.submissions_day["submissions_day"]))
     due = ds.assignments[ds.assignments["duedate"] < ds.as_of_ts]
@@ -68,6 +72,9 @@ def build_progress_rows(ds: CourseDataset, metrics: pd.DataFrame,
             avg_access_per_student=round(float(cm["total_access_count"].mean()), 2) if len(cm) else 0.0,
             red_count=red, yellow_count=yellow, green_count=green,
             section_progress=section_progress,
+            rule_set_id=rule_of.get(cid),
+            editing_teacher_ids=[int(t) for t in getattr(c, "editing_teacher_ids", None) or []],
+            course_start_date=datetime.fromtimestamp(int(c.startdate), TZ).date(),
             etl_run_id=run_id,
         ))
     return rows

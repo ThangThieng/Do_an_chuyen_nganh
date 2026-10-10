@@ -1,0 +1,67 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Minh bạch – phác thảo</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.wrap { display: grid; grid-template-columns: 640px 1fr; gap: 18px; padding: 16px 20px; }
+.drawer { background: #fff; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.12); border: 1px solid #e5e7eb; }
+.drawer .hd { padding: 14px 18px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; }
+.drawer .hd h3 { margin: 0; font-size: 16px; }
+.drawer .bd { padding: 14px 18px; }
+h4 { margin: 14px 0 6px; font-size: 13.5px; color: #1f2937; }
+.formula { background: #f6f8fb; border: 1px solid #e3e8f0; border-radius: 8px; padding: 8px 12px; font-size: 13.5px; }
+.flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.flow span.n { border: 1px solid #cfd8e3; background: #f8fafc; border-radius: 6px; padding: 4px 8px; }
+.flow span.a { color: #9ca3af; }
+.score td.c { text-align: center; }
+</style></head><body>
+<div class="legend-note" style="padding:12px 20px 0;margin:0"><span class="muted">Trái: ngăn “Nguồn &amp; cách tính” mở ra từ bất kỳ biểu đồ/thẻ nào. Phải: phần mới “Phân tích điểm rủi ro” trong cửa sổ chi tiết sinh viên. Nội dung ngưỡng/trọng số do API trả về từ cùng cấu hình mà ETL dùng.</span></div>
+<div class="wrap">
+  <div class="drawer new" data-new="MỚI · ngăn Nguồn & cách tính">
+    <div class="hd"><h3>Nguồn dữ liệu &amp; cách tính – Mức rủi ro</h3><span style="margin-left:auto;color:#6b6a65">Đóng</span></div>
+    <div class="bd">
+      <div class="small muted">Mỗi sinh viên trong mỗi môn được chấm 0, 1 hoặc 2 điểm cho 3 tiêu chí, sau đó xếp mức theo luật bên dưới.</div>
+      <h4>1. Tiêu chí, ngưỡng và bảng Moodle nguồn</h4>
+      <table class="t" style="font-size:12.5px">
+        <tr><th>Tiêu chí</th><th>1 điểm</th><th>2 điểm</th><th>Trọng số</th><th>Lấy từ bảng Moodle</th></tr>
+        <tr><td>C1 Vắng học</td><td>vắng ≥ 15% buổi</td><td>≥ 30%</td><td class="r">35%</td><td><code>mdl_attendance_sessions</code>, <code>mdl_attendance_log</code>, <code>mdl_attendance_statuses</code></td></tr>
+        <tr><td>C2 Không tương tác</td><td>&gt; 7 ngày chưa vào, hoặc lượt truy cập 14 ngày &lt; 50% trung vị lớp</td><td>chưa từng vào hoặc &gt; 14 ngày</td><td class="r">30%</td><td><code>mdl_logstore_standard_log</code></td></tr>
+        <tr><td>C3 Thiếu bài tập</td><td>thiếu ≥ 20% bài đã tới hạn</td><td>≥ 60%</td><td class="r">35%</td><td><code>mdl_assign</code>, <code>mdl_assign_submission</code>, <code>mdl_groups_members</code></td></tr>
+      </table>
+      <div class="small muted" style="margin-top:4px">Danh sách sinh viên của môn: <code>mdl_user_enrolments</code>, <code>mdl_enrol</code>, <code>mdl_role_assignments</code> (vai trò student), <code>mdl_user</code>.</div>
+      <h4>2. Công thức điểm và luật xếp mức</h4>
+      <div class="formula">Điểm rủi ro = 100 × (0,35·C1 + 0,30·C2 + 0,35·C3) ÷ 2 &nbsp;→&nbsp; từ 0 đến 100</div>
+      <ul style="margin:8px 0 0;padding-left:18px;font-size:13px">
+        <li><span class="badge b-red">Nguy cơ cao</span> khi C2 = 2, hoặc ≥ 2 tiêu chí đạt 2 điểm, hoặc tổng C1+C2+C3 ≥ 4</li>
+        <li><span class="badge b-yel">Cần lưu ý</span> khi tổng ≥ 1 và không thuộc mức đỏ</li>
+        <li><span class="badge b-grn">An toàn</span> khi tổng = 0</li>
+      </ul>
+      <h4>3. Dữ liệu đi qua những bước nào</h4>
+      <div class="flow"><span class="n">Moodle (các bảng ở mục 1)</span><span class="a">→</span><span class="n">ETL <b>student_risk</b><br>07:15–21:15, 2 giờ/lần</span><span class="a">→</span><span class="n"><code>analytics.fact_student_risk_summary</code><br>mỗi ngày 1 snapshot</span><span class="a">→</span><span class="n">API → biểu đồ này</span></div>
+      <h4>4. Độ mới của số liệu</h4>
+      <div class="kv"><span class="k">Snapshot đang xem</span><span>06/11/2026</span><span class="k">Lần ETL gần nhất</span><span>#1284 · thành công · 06/11/2026 09:15 (số minh họa)</span><span class="k">Luật đang áp dụng</span><span>Mặc định của trường (v1.1) – môn chưa đặt luật riêng</span><span class="k">Thời điểm tham chiếu</span><span>06/11/2026 10:30 (chế độ demo)</span></div>
+      <div class="hint" style="margin-top:12px">Mức rủi ro là tín hiệu để giảng viên chú ý, không phải kết luận về kết quả học tập.</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="box-shadow:0 6px 24px rgba(0,0,0,.10)">
+      <div class="hd"><span class="badge b-red">Nguy cơ cao</span><h3>Bùi Mai Oanh</h3><span class="muted small">2212032 · IT001 – Nhập môn lập trình</span><span class="link">Điểm rủi ro 100</span></div>
+      <div class="bd">
+        <div style="background:#fff2f0;border:1px solid #ffccc7;border-radius:8px;padding:8px 12px;font-size:13px">Lý do: vắng 9/18 buổi (50%); chưa từng truy cập môn học; thiếu 3/3 bài tập</div>
+        <div class="new" data-new="MỚI · Phân tích điểm rủi ro" style="margin-top:22px;outline-offset:6px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>Phân tích điểm rủi ro</b><span class="link">Nguồn &amp; cách tính</span></div>
+          <table class="t score">
+            <tr><th>Tiêu chí</th><th>Số liệu của sinh viên</th><th>So với ngưỡng</th><th class="c">Điểm</th><th class="r">Trọng số</th><th class="r">Đóng góp</th></tr>
+            <tr><td>C1 Vắng học</td><td>vắng 9/18 buổi = 50%</td><td>≥ 30% → mức 2</td><td class="c"><b>2</b>/2</td><td class="r">35%</td><td class="r"><b>35</b></td></tr>
+            <tr><td>C2 Không tương tác</td><td>chưa từng truy cập môn</td><td>chưa từng vào → mức 2</td><td class="c"><b>2</b>/2</td><td class="r">30%</td><td class="r"><b>30</b></td></tr>
+            <tr><td>C3 Thiếu bài tập</td><td>thiếu 3/3 bài đã tới hạn = 100%</td><td>≥ 60% → mức 2</td><td class="c"><b>2</b>/2</td><td class="r">35%</td><td class="r"><b>35</b></td></tr>
+            <tr><td colspan="3"><b>Tổng</b> = 100 × (0,35·2 + 0,30·2 + 0,35·2) ÷ 2</td><td class="c"><b>6</b></td><td></td><td class="r"><b>100</b></td></tr>
+          </table>
+          <div style="margin-top:8px;font-size:13px">Xếp <span class="badge b-red">Nguy cơ cao</span> vì: <b>C2 = 2</b> (luật 1) · <b>3 tiêu chí đạt 2 điểm</b> (luật 2) · <b>tổng 6 ≥ 4</b> (luật 3).</div>
+          <div class="small muted" style="margin-top:6px">Nguồn: <code>mdl_attendance_log</code> (18 buổi đã điểm danh) · <code>mdl_logstore_standard_log</code> (0 sự kiện trong môn) · <code>mdl_assign_submission</code> (0/3 bài nộp). Snapshot 06/11/2026.</div>
+        </div>
+        <div class="keep" style="height:110px;margin-top:22px">So sánh với trung bình lớp · Hoạt động theo tuần · Bài tập · Lịch sử cảnh báo · Can thiệp<br><span class="small muted">GIỮ NGUYÊN</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>

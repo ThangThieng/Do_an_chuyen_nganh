@@ -1,5 +1,5 @@
 # Lệnh tắt cho Linux/macOS (Windows: scripts/lms.ps1) – SPEC 6.4
-.PHONY: setup seed mock etl-backfill users api web test e2e bench docker
+.PHONY: setup seed mock etl-backfill users api web moodle-stub etl messaging-check test e2e bench docker
 
 setup:
 	python -m pip install -r requirements.txt
@@ -24,6 +24,15 @@ api:
 
 web:
 	cd frontend && npm run dev
+
+moodle-stub:
+	python -m tools.moodle_ws_stub
+
+etl:
+	python -m etl.scheduler
+
+messaging-check:
+	python -m backend.app.cli messaging-check
 
 test:
 	python -m pytest -q

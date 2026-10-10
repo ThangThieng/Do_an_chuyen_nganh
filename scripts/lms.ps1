@@ -9,6 +9,9 @@
   .\scripts\lms.ps1 etl-backfill   # nạp lịch sử 3 bảng fact
   .\scripts\lms.ps1 users          # tạo/cập nhật tài khoản (cần $env:BACKEND_SEED_PASSWORD)
   .\scripts\lms.ps1 api | web      # chạy API :8000 / frontend dev :5173
+  .\scripts\lms.ps1 moodle-stub    # máy chủ Moodle 3.9 mô phỏng :8091 (kênh tin nhắn; hộp tin /stub/inbox)
+  .\scripts\lms.ps1 etl            # ETL scheduler (tính rủi ro, nhắc tự động, gửi hàng đợi mỗi phút)
+  .\scripts\lms.ps1 messaging-check # in cấu hình kênh gửi tin (đã che bí mật), thử kết nối SMTP và Moodle
   .\scripts\lms.ps1 test           # pytest + vitest
   .\scripts\lms.ps1 e2e            # Playwright (cần API + web đang chạy, $env:LMS_DEMO_PASSWORD)
   .\scripts\lms.ps1 bench          # hiệu năng: dựng x10, EXPLAIN x1/x10 (Locust, ETL: xem perf/README.md)
@@ -16,7 +19,8 @@
 #>
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("setup", "seed", "mock", "etl-backfill", "users", "api", "web", "test", "e2e", "bench", "docker")]
+    [ValidateSet("setup", "seed", "mock", "etl-backfill", "users", "api", "web", "moodle-stub", "etl", "messaging-check",
+                 "test", "e2e", "bench", "docker")]
     [string]$Command
 )
 
@@ -43,6 +47,9 @@ switch ($Command) {
     "users" { Invoke-Step "Đồng bộ tài khoản" { python -m backend.app.cli sync-users } }
     "api" { python -m uvicorn backend.app.main:app --port 8000 }
     "web" { Push-Location frontend; npm run dev; Pop-Location }
+    "moodle-stub" { python -m tools.moodle_ws_stub }
+    "etl" { python -m etl.scheduler }
+    "messaging-check" { Invoke-Step "Kiểm tra kênh gửi tin" { python -m backend.app.cli messaging-check } }
     "test" {
         Invoke-Step "pytest" { python -m pytest -q }
         Invoke-Step "vitest" { Push-Location frontend; npm test; Pop-Location }

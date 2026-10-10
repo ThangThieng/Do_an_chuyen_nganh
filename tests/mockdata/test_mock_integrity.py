@@ -28,15 +28,67 @@ def scalar(conn, query: str, params=None):
 AS_OF_TS = int(resolve_as_of().timestamp())
 
 
-# ----------------------------------------------------------------------------- quy mô đã thống nhất
+# ----------------------------------------------------------------------------- quy mô đã thống nhất (10/10/2026: 5 khoa)
 def test_scale_matches_agreed_scope(conn):
-    assert scalar(conn, "SELECT COUNT(*) FROM mdl_course_categories WHERE depth = 1") == 1
-    assert scalar(conn, "SELECT name FROM mdl_course_categories WHERE depth = 1") == cfg.FACULTY[1]
-    assert scalar(conn, "SELECT COUNT(*) FROM mdl_course WHERE id <> 1") == 15
+    faculties = conn.execute("SELECT idnumber, name FROM mdl_course_categories WHERE depth = 1 ORDER BY sortorder").fetchall()
+    assert faculties == [(f["code"], f["name"]) for f in cfg.FACULTIES]
+    assert scalar(conn, "SELECT COUNT(*) FROM mdl_course WHERE id <> 1") == len(cfg.ALL_COURSES)
     students = scalar(conn, """SELECT COUNT(DISTINCT ra.userid) FROM mdl_role_assignments ra
                                JOIN mdl_role r ON r.id = ra.roleid AND r.shortname = 'student'""")
     assert students == cfg.N_STUDENTS
     assert scalar(conn, "SELECT COUNT(*) FROM mdl_user WHERE username LIKE 'gv.%'") == len(cfg.TEACHERS)
+
+
+def test_students_belong_to_their_faculty(conn):
+    """mdl_user.department = khoa quản lý; MSSV đúng dải của khoa; số SV mỗi khoa đúng cấu hình."""
+    rows = dict(conn.execute("""SELECT department, COUNT(*) FROM mdl_user
+                                WHERE username ~ '^22[0-9]{5}$' GROUP BY department""").fetchall())
+    assert rows == {f["name"]: f["students"] for f in cfg.FACULTIES}
+    for f in cfg.FACULTIES:
+        bad = scalar(conn, "SELECT COUNT(*) FROM mdl_user WHERE department = %(d)s AND username ~ '^22[0-9]{5}$' "
+                           "AND substr(username, 3, 1) <> %(digit)s", {"d": f["name"], "digit": str(f["digit"])})
+        assert bad == 0, f["code"]
+    assert scalar(conn, "SELECT COUNT(*) FROM mdl_user WHERE username ~ '^22' AND institution <> %(i)s",
+                  {"i": cfg.INSTITUTION}) == 0
+
+
+def test_course_structure_follows_course_type(conn):
+    """Lý thuyết 3 bài lớn + 1 điểm danh; thực hành báo cáo hằng tuần + 2 điểm danh; đồ án báo cáo tiến độ + gặp GVHD."""
+    counts = {r[0]: (r[1], r[2]) for r in conn.execute("""
+        SELECT c.shortname,
+               (SELECT COUNT(*) FROM mdl_assign a WHERE a.course = c.id),
+               (SELECT COUNT(*) FROM mdl_attendance a WHERE a.course = c.id)
+        FROM mdl_course c WHERE c.id <> 1""").fetchall()}
+    for shortname, (_, _, kind) in cfg.ALL_COURSES.items():
+        assert counts[shortname] == (len(cfg.ASSIGNMENT_PLAN[kind]), len(cfg.ATTENDANCE_PLAN[kind])), shortname
+
+
+def test_shared_course_has_students_from_other_faculties(conn):
+    other = scalar(conn, """SELECT COUNT(DISTINCT u.department) FROM mdl_user_enrolments ue
+        JOIN mdl_enrol e ON e.id = ue.enrolid JOIN mdl_course c ON c.id = e.courseid
+        JOIN mdl_user u ON u.id = ue.userid
+        WHERE c.shortname = ANY(%(codes)s) AND u.username ~ '^22'""", {"codes": list(cfg.SHARED_COURSES)})
+    assert other == len(cfg.FACULTIES) - 1      # mọi khoa trừ Ngoại ngữ
+
+
+def test_messaging_tables_match_moodle_39(conn):
+    """Các bảng nhắn tin tạo đúng cột của Moodle 3.9 (lib/db/install.xml)."""
+    expected = {
+        "mdl_messages": ["id", "useridfrom", "conversationid", "subject", "fullmessage", "fullmessageformat",
+                         "fullmessagehtml", "smallmessage", "timecreated", "fullmessagetrust", "customdata"],
+        "mdl_message_conversations": ["id", "type", "name", "convhash", "component", "itemtype", "itemid",
+                                      "contextid", "enabled", "timecreated", "timemodified"],
+        "mdl_message_conversation_members": ["id", "conversationid", "userid", "timecreated"],
+        "mdl_user_preferences": ["id", "userid", "name", "value"],
+    }
+    for table, columns in expected.items():
+        actual = [r[0] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = %(t)s ORDER BY ordinal_position",
+            {"t": table}).fetchall()]
+        assert actual == columns, table
+    assert scalar(conn, "SELECT COUNT(*) FROM mdl_user WHERE username = %(u)s",
+                  {"u": cfg.SERVICE_ACCOUNT["username"]}) == 1
+    assert scalar(conn, "SELECT COUNT(*) FROM mdl_user_preferences WHERE name = 'message_blocknoncontacts' AND value = '0'") > 0
 
 
 # ----------------------------------------------------------------------------- toàn vẹn tham chiếu (Moodle không có FK)
@@ -126,10 +178,12 @@ def test_online_sessions_exist_at_as_of(conn):
 
 # ----------------------------------------------------------------------------- hồ sơ hành vi
 def test_ground_truth_distribution_matches_spec():
+    """Tỷ lệ hồ sơ hành vi của từng khoa khớp cấu hình (sai số ngẫu nhiên ±3 điểm %)."""
     truth = pd.read_csv(OUTPUT_DIR / "ground_truth_profiles.csv")
-    share = truth["profile"].value_counts(normalize=True)
-    for profile, expected in cfg.PROFILES.items():
-        assert abs(share[profile] - expected) < 0.03, f"{profile}: {share[profile]:.3f} vs {expected}"
+    for f in cfg.FACULTIES:
+        share = truth.loc[truth["department"] == f["name"], "profile"].value_counts(normalize=True)
+        for profile, expected in f["profiles"].items():
+            assert abs(share[profile] - expected) < 0.03, f"{f['code']} {profile}: {share[profile]:.3f} vs {expected}"
     red = truth[truth["profile"] == "RED"]
     assert abs(red["never"].mean() - cfg.BEHAVIOR["RED"]["never"]) < 0.08
 

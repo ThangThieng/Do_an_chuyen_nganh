@@ -7,7 +7,7 @@ môn không có dữ liệu -> 404, môn của giảng viên khác -> 403 (SPEC 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from http import HTTPStatus
 from typing import Literal
 
@@ -18,10 +18,13 @@ from backend.app.core.config import today
 from backend.app.core.db import get_conn
 from backend.app.core.security import CurrentUser
 from backend.app.repositories import admin as admin_repo
+from backend.app.repositories import rules as rules_repo
 from backend.app.repositories import teacher as teacher_repo
+from backend.app.repositories import trends as trends_repo
 from backend.app.repositories.reports import ReportFilters
 from backend.app.routers._export import export_response
 from backend.app.routers.deps import not_found, optional_term, stamp, teacher_user
+from backend.app.schemas.admin import RiskTrendOut
 from backend.app.schemas.common import RiskLevel
 from backend.app.schemas.reports import ExportFormat
 from backend.app.schemas.teacher import (CompareOut, InterventionCreated, InterventionIn, ProgressOut,
@@ -80,7 +83,21 @@ def risk_summary(access: CourseAccess = Depends(course_access), conn: Connection
         "by_criterion": {k: row[k] for k in ("attendance", "inactivity", "assignment")},
         "by_criterion_red": {k: row[f"{k}_red"] for k in ("attendance", "inactivity", "assignment")},
         "attendance_no_data": row["attendance_no_data"], "data_updated_at": stamp(conn),
+        "prev_week": teacher_repo.counts_at(conn, access.course_id, access.teacher_id, snapshot - timedelta(days=7)),
+        "rule": rules_repo.rule_info(conn, access.course_id),
     }
+
+
+@router.get("/courses/{course_id}/risk-trend", response_model=RiskTrendOut,
+            summary="Diễn biến tỷ lệ Đỏ/Vàng/Xanh của lớp theo tuần/ngày (đồ thị xu hướng đi kèm biểu đồ tròn)")
+def risk_trend(access: CourseAccess = Depends(course_access), granularity: Literal["week", "day"] = "week",
+               conn: Connection = Depends(get_conn)) -> dict:
+    term = teacher_repo.course_term(conn, access.course_id, today())
+    if term is None:
+        raise not_found("Môn học chưa có dữ liệu")
+    data = trends_repo.risk_trend(conn, term[0], term[1], today(), granularity, course_id=access.course_id,
+                                  teacher_id=access.teacher_id)
+    return {**data, "academic_year": term[0], "semester": term[1], "scope": "course", "data_updated_at": stamp(conn)}
 
 
 @router.get("/courses/{course_id}/students", response_model=RiskStudentsOut, summary="Bảng cảnh báo sinh viên")
@@ -154,16 +171,8 @@ def compare(user_id: int = Path(ge=1), access: CourseAccess = Depends(course_acc
     row = teacher_repo.compare(conn, access.course_id, user_id, access.teacher_id, snapshot)
     if row is None:
         raise not_found("Sinh viên không có trong danh sách lớp hiện tại")
-    metrics = [
-        ("access_14d", "Truy cập 14 ngày", "lượt", row["access_count_14d"], row["class_access_14d"]),
-        ("total_access", "Tổng lượt truy cập", "lượt", row["total_access_count"], row["class_total_access"]),
-        ("submission_rate", "Tỷ lệ nộp bài", "%", row["submission_rate"], row["class_submission_rate"]),
-        ("attendance_rate", "Chuyên cần", "%", row["attendance_rate"], row["class_attendance_rate"]),
-        ("completion_rate", "Hoàn thành hoạt động", "%", row["completion_rate"], row["class_completion_rate"]),
-    ]
     return {"course_id": access.course_id, "user_id": user_id, "snapshot_date": snapshot,
-            "metrics": [dict(key=k, label=label, unit=unit, student=s, class_avg=c) for k, label, unit, s, c in metrics],
-            "data_updated_at": stamp(conn)}
+            "metrics": teacher_repo.compare_metrics(row), "data_updated_at": stamp(conn)}
 
 
 @router.get("/courses/{course_id}/export", summary="Xuất danh sách cảnh báo của môn (Excel/PDF)",

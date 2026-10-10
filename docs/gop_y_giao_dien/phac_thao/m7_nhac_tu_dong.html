@@ -1,0 +1,50 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Nhắc tự động – phác thảo</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.tabs { display:flex; gap:4px; border-bottom:1px solid #e5e7eb; margin-bottom:12px; }
+.tabs span { padding:8px 14px; color:#52514e; }
+.tabs span.on { color:#1f2937; font-weight:600; border-bottom:2px solid #256abf; }
+.rulecard { border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+.rulecard .h { display:flex; align-items:center; gap:8px; font-weight:600; }
+.sw2 { margin-left:auto; width:34px; height:18px; border-radius:9px; background:#256abf; position:relative; }
+.sw2::after { content:""; position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:50%; background:#fff; }
+.sw2.off { background:#c9c8c0; } .sw2.off::after { right:auto; left:2px; }
+.st-ok { color:#1E6B3E; font-weight:600; } .st-wait { color:#7A5800; font-weight:600; } .st-err { color:#9B2C2C; font-weight:600; }
+</style></head><body>
+<div class="top"><span class="logo"><i></i>LMS Analytics</span><span class="sel" style="min-width:300px">IT004 – Cơ sở dữ liệu ▾</span>
+  <nav><a>Cảnh báo</a><a>Tiến độ lớp</a><a>Thiết lập cảnh báo</a><a class="on">Can thiệp</a><a>Trợ giúp</a></nav>
+  <span class="right">Dữ liệu: 06/11/2026 10:30 <span class="src">Nguồn dữ liệu</span> Lê Quốc Bảo</span></div>
+<div class="page">
+  <div class="legend-note"><span class="muted">Tab “Nhắc tự động” (trái) và “Đã gửi” (phải). Thời điểm và mã tin nhắn là minh họa.</span></div>
+  <div class="grid" style="grid-template-columns:5fr 7fr;align-items:start">
+    <div class="card"><div class="bd" style="padding-top:4px">
+      <div class="tabs"><span>Cần liên hệ</span><span>Đã gửi</span><span class="on">Nhắc tự động</span><span>Mẫu tin nhắn</span></div>
+      <div class="rulecard"><div class="h">Không truy cập Moodle quá 7 ngày<span class="sw2"></span></div>
+        <div class="small" style="margin-top:6px">Kênh: tin nhắn Moodle, email · Mẫu: Nhắc quay lại học · Gửi: <b>tự động</b><br>Mỗi sinh viên tối đa 1 lần / 7 ngày · không gửi 22:00–06:00</div>
+        <div class="small muted" style="margin-top:6px">Lần chạy gần nhất 06/11 09:20 · 4 sinh viên khớp · đã gửi 4</div></div>
+      <div class="rulecard"><div class="h">Vừa chuyển sang Nguy cơ cao<span class="sw2"></span></div>
+        <div class="small" style="margin-top:6px">Kênh: tin nhắn Moodle · Mẫu: Nhắc khi có nguy cơ cao · Gửi: <b>chờ giảng viên duyệt</b></div>
+        <div class="small muted" style="margin-top:6px">Lần chạy gần nhất 06/11 09:20 · 3 tin đang chờ duyệt</div></div>
+      <div class="rulecard"><div class="h">Quá hạn nộp bài chưa nộp<span class="sw2 off"></span></div>
+        <div class="small" style="margin-top:6px">Kênh: email · Mẫu: Nhắc nộp bài · Gửi: tự động · 1 ngày sau hạn</div></div>
+      <div style="display:flex;gap:8px"><span class="btn">Thêm quy tắc</span><span class="btn">Chạy thử (không gửi)</span></div>
+    </div></div>
+
+    <div class="card"><div class="bd" style="padding-top:4px">
+      <div class="tabs"><span>Cần liên hệ</span><span class="on">Đã gửi</span><span>Nhắc tự động</span><span>Mẫu tin nhắn</span></div>
+      <table class="t" style="font-size:12.5px">
+        <tr><th>Thời điểm</th><th>Sinh viên</th><th>Kênh</th><th>Nguồn</th><th>Trạng thái</th><th>Mã xác nhận</th></tr>
+        <tr><td>06/11 10:41</td><td>Bùi Mai Oanh</td><td>Moodle</td><td>Giảng viên</td><td class="st-ok">Đã gửi</td><td>tin nhắn #1532</td></tr>
+        <tr><td>06/11 10:41</td><td>Bùi Mai Oanh</td><td>Email</td><td>Giảng viên</td><td class="st-ok">Đã gửi</td><td>&lt;a81f…@lms-analytics&gt;</td></tr>
+        <tr><td>06/11 09:20</td><td>Nguyễn Ngọc Nhung</td><td>Email</td><td>Tự động</td><td class="st-ok">Đã gửi</td><td>&lt;5c02…@lms-analytics&gt;</td></tr>
+        <tr><td>06/11 09:20</td><td>Lê Đức Tài</td><td>Moodle</td><td>Tự động</td><td class="st-wait">Chờ duyệt</td><td>–</td></tr>
+        <tr><td>06/11 09:20</td><td>Hồ Văn Lâm</td><td>Email</td><td>Tự động</td><td class="st-err">Lỗi, sẽ thử lại 09:35</td><td>SMTP 451</td></tr>
+      </table>
+      <div class="hint">Mỗi tin có mã xác nhận do máy chủ nhận trả về (mã tin nhắn Moodle hoặc Message-ID email) – đây là bằng chứng tin đã được gửi đi. Nhấn một dòng để xem nội dung đã gửi.</div>
+      <div class="card" style="margin-top:12px;background:#fafbfc"><div class="bd small">
+        <b>Trạng thái kênh gửi</b> (quản trị cấu hình trong Hệ thống › Kênh gửi tin)<br>
+        Email: SMTP <code>smtp.gmail.com:587</code> · chế độ <b>kiểm thử – chuyển hướng</b><br>
+        Moodle: <code>http://localhost:8091/webservice/rest/server.php</code> · máy chủ <b>mô phỏng Moodle 3.9</b></div></div>
+    </div></div>
+  </div>
+</div></body></html>

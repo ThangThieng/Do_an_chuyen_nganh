@@ -1,0 +1,57 @@
+@startuml uc_tong_quat
+!include _style.iuml
+left to right direction
+actor "Người dùng" as ND
+actor "Quản trị viên" as QT
+actor "Giảng viên" as GV
+actor "Bộ lập lịch ETL\n(tác nhân thời gian)" as LL
+actor "Moodle LMS\n(hệ thống ngoài)" as MD
+QT -up-|> ND
+GV -up-|> ND
+
+rectangle "Hệ thống LMS Analytics" {
+  package "Chức năng chung" {
+    usecase "UC01 Đăng nhập" as UC01
+    usecase "UC02 Đổi mật khẩu" as UC02
+    usecase "UC03 Xem hướng dẫn sử dụng" as UC03
+  }
+  package "Phân hệ Quản trị" {
+    usecase "UC04 Thống kê phân cấp\nKhoa – Môn – Sinh viên" as UC04
+    usecase "UC05 Theo dõi lưu lượng truy cập" as UC05
+    usecase "UC06 Xuất báo cáo Excel/PDF" as UC06
+    usecase "UC07 Tra cứu danh mục môn học" as UC07
+    usecase "UC08 Quản lý người dùng" as UC08
+    usecase "UC09 Xem nhật ký ETL" as UC09
+    usecase "UC10 Sao lưu dữ liệu" as UC10
+    usecase "UC11 Phục hồi dữ liệu" as UC11
+  }
+  package "Phân hệ Giảng viên" {
+    usecase "UC12 Xem cảnh báo sinh viên nguy cơ" as UC12
+    usecase "UC13 Xem chi tiết sinh viên" as UC13
+    usecase "UC14 Ghi nhận can thiệp" as UC14
+    usecase "UC15 Xuất danh sách cảnh báo" as UC15
+    usecase "UC16 Xem tiến độ lớp" as UC16
+  }
+  package "Tiến trình nền" {
+    usecase "UC17 Đồng bộ và tổng hợp\ndữ liệu từ Moodle (ETL)" as UC17
+  }
+}
+ND --> UC01
+ND --> UC02
+ND --> UC03
+QT --> UC04
+QT --> UC05
+QT --> UC06
+QT --> UC07
+QT --> UC08
+QT --> UC09
+QT --> UC10
+QT --> UC11
+GV --> UC12
+GV --> UC13
+GV --> UC14
+GV --> UC15
+GV --> UC16
+LL --> UC17
+UC17 --> MD
+@enduml

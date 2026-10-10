@@ -1,0 +1,42 @@
+@startuml comp_kien_truc
+!include _style.iuml
+left to right direction
+actor "Quản trị viên /\nGiảng viên" as U
+package "Tầng trình bày (React SPA)" {
+  component "pages + layouts" as PG
+  component "charts (Chart.js)" as CH
+  component "api (axios + React Query)" as APIC
+}
+package "Tầng dịch vụ (FastAPI)" {
+  component "routers\n(auth, common, admin,\nreports, teacher, system)" as RT
+  component "core\n(config, db, security, cache)" as CORE
+  component "repositories\n(truy vấn SQL)" as REPO
+  component "services\n(Excel, PDF, sao lưu)" as SV
+}
+package "Tầng lưu trữ phân tích" {
+  database "lms_analytics\n(3 bảng fact + bảng phụ trợ)" as AN
+}
+package "Tầng xử lý dữ liệu (ETL – Python)" {
+  component "Scheduler\n(APScheduler)" as SCH
+  component "Extract\n(SQL tĩnh, REPEATABLE READ)" as EX
+  component "Transform\n(pandas, luật rủi ro)" as TR
+  component "Load\n(COPY + UPSERT)" as LD
+}
+package "Tầng nguồn dữ liệu" {
+  database "moodle_src\n(25 bảng mdl_*)" as MD
+}
+U --> PG : trình duyệt
+PG --> CH
+PG --> APIC
+APIC --> RT : REST /api/v1 + JWT
+RT --> CORE
+RT --> REPO
+RT --> SV
+REPO --> AN : SELECT (tham số bind)
+SV --> AN : COPY (sao lưu/phục hồi)
+SCH --> EX
+EX --> TR
+TR --> LD
+EX --> MD : SELECT (chỉ đọc)
+LD --> AN : INSERT ... ON CONFLICT
+@enduml

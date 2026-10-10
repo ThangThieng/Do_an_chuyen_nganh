@@ -1,0 +1,26 @@
+@startuml state_muc_rui_ro
+!include _style.iuml
+hide empty description
+[*] --> ChuaCoSnapshot : sinh viên được ghi danh vào môn
+state "Chưa có ảnh chụp" as ChuaCoSnapshot
+state "XANH (GREEN)\ntổng điểm = 0" as GREEN
+state "VÀNG (YELLOW)\ntổng ≥ 1, không thuộc mức đỏ" as YELLOW
+state "ĐỎ (RED)\nC2 = 2 hoặc ≥ 2 tiêu chí = 2\nhoặc tổng ≥ 4" as RED
+ChuaCoSnapshot --> GREEN : job student_risk\n[tổng = 0]
+ChuaCoSnapshot --> YELLOW : job student_risk\n[1 ≤ tổng, không đỏ]
+ChuaCoSnapshot --> RED : job student_risk\n[điều kiện đỏ]
+GREEN --> YELLOW : chấm lại\n[vắng / ít truy cập / thiếu bài tăng]
+YELLOW --> GREEN : chấm lại [tổng = 0]
+YELLOW --> RED : chấm lại [điều kiện đỏ]
+RED --> YELLOW : chấm lại [hết điều kiện đỏ, tổng ≥ 1]
+GREEN --> RED : chấm lại [điều kiện đỏ]
+RED --> GREEN : chấm lại [tổng = 0]
+GREEN --> [*] : hủy ghi danh / môn kết thúc
+YELLOW --> [*] : hủy ghi danh / môn kết thúc
+RED --> [*] : hủy ghi danh / môn kết thúc
+note right of RED
+  Mỗi lần chấm lại tạo ảnh chụp của ngày;
+  giảng viên có thể ghi nhận can thiệp,
+  can thiệp lưu kèm mức rủi ro lúc đó.
+end note
+@enduml

@@ -1,0 +1,15 @@
+@startuml state_tai_khoan
+!include _style.iuml
+hide empty description
+[*] --> HoatDong : sync-users tạo tài khoản\n(mật khẩu ban đầu)
+state "Đang hoạt động" as HoatDong
+state "Bị khóa" as Khoa
+HoatDong --> Khoa : quản trị viên khóa\n/ tài khoản Moodle bị khóa khi đồng bộ
+Khoa --> HoatDong : quản trị viên mở khóa
+HoatDong --> HoatDong : đổi mật khẩu / đặt lại mật khẩu\n/ password_changed_at = now(),\ntoken cũ mất hiệu lực
+Khoa --> Khoa : đặt lại mật khẩu
+note right of Khoa
+  Mọi request của tài khoản bị khóa
+  nhận 401 ngay, không chờ token hết hạn.
+end note
+@enduml

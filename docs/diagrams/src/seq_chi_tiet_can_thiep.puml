@@ -1,0 +1,40 @@
+@startuml seq_chi_tiet_can_thiep
+!include _style.iuml
+autonumber
+actor "Giảng viên" as GV
+participant "TeacherRisk +\nStudentDetailModal" as FE
+participant "teacher router\n(FastAPI)" as API
+participant "security\n(get_current_user)" as SEC
+participant "teacher_repo" as REPO
+database "lms_analytics" as DB
+
+GV -> FE : nhấn "Chi tiết" ở một sinh viên
+FE -> API : GET /teacher/courses/{c}/students/{u}
+API -> SEC : giải mã JWT, nạp app_user
+SEC -> DB : SELECT role, is_active, password_changed_at
+alt token sai/hết hạn/bị thu hồi hoặc tài khoản bị khóa
+  SEC --> FE : 401
+else hợp lệ
+  API -> REPO : course_teacher_ids(c)
+  REPO -> DB : SELECT teacher_ids (dòng tiến độ mới nhất)
+  alt giảng viên không phụ trách môn
+    API --> FE : 403 "Bạn không phụ trách môn học này"
+  else đúng môn
+    API -> REPO : student_detail(), risk_history(), interventions()
+    REPO -> DB : SELECT ... FROM fact_student_risk_summary\nWHERE teacher_ids @> ARRAY[gv]
+    REPO -> DB : SELECT ... FROM intervention_log
+    API --> FE : 200 (chỉ số, lý do, JSONB tuần, bài tập, lịch sử)
+    FE -> API : GET .../students/{u}/compare
+    API --> FE : 200 (so sánh với trung bình lớp)
+    FE --> GV : Modal: lý do, biểu đồ so sánh, hoạt động theo tuần
+  end
+end
+== Ghi nhận can thiệp (use case mở rộng) ==
+GV -> FE : chọn "Ghi chú", nhập nội dung
+FE -> API : POST .../students/{u}/interventions {action_type, content}
+API -> REPO : create_intervention(..., risk_level hiện tại)
+REPO -> DB : INSERT INTO intervention_log ... RETURNING id
+API --> FE : 201 {id, created_at}
+FE -> FE : làm mới dữ liệu chi tiết (React Query)
+FE --> GV : can thiệp mới hiện trong lịch sử
+@enduml

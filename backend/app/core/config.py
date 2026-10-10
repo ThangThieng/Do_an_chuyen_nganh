@@ -13,6 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from common.settings import APP_TIMEZONE, TZ, resolve_as_of  # noqa: F401  (tái xuất)
+from database.config import PROJECT_ROOT
 
 MIN_SECRET_LENGTH = 32
 _FONT_CANDIDATES = (
@@ -47,6 +48,7 @@ class BackendSettings:
     pdf_font_bold: str = ""
     pdf_max_rows: int = 5_000
     excel_max_rows: int = 200_000
+    backup_dir: str = ""
 
 
 def _int_env(name: str, default: int) -> int:
@@ -78,6 +80,7 @@ def get_settings() -> BackendSettings:
         pdf_font_bold=os.getenv("BACKEND_PDF_FONT_BOLD") or ("" if os.getenv("BACKEND_PDF_FONT") else font_bold),
         pdf_max_rows=_int_env("BACKEND_PDF_MAX_ROWS", 5_000),
         excel_max_rows=_int_env("BACKEND_EXCEL_MAX_ROWS", 200_000),
+        backup_dir=os.getenv("BACKEND_BACKUP_DIR") or str(PROJECT_ROOT / "backups"),
     )
 
 

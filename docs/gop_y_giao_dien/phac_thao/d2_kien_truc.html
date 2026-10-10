@@ -1,0 +1,56 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Kiến trúc</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body { width: 1440px; background: #fff; padding: 20px 28px; }
+.lane { display: grid; grid-template-columns: 210px 1fr; gap: 14px; margin-bottom: 12px; align-items: stretch; }
+.lab { border-radius: 10px; padding: 12px 14px; color: #fff; font-weight: 700; font-size: 14px; display: flex; flex-direction: column; justify-content: center; }
+.lab small { font-weight: 400; font-size: 12px; opacity: .92; margin-top: 4px; }
+.boxes { display: flex; gap: 10px; flex-wrap: wrap; }
+.b { border: 1.5px solid #cfd8e3; border-radius: 9px; padding: 8px 12px; font-size: 12.5px; background: #fafcff; flex: 1; min-width: 190px; }
+.b b { display: block; font-size: 13px; margin-bottom: 2px; color: #1f2937; }
+.b.new { border-color: #256abf; background: #f0f6fd; outline: none; }
+.b.new::after { content: "MỚI"; position: static; display: inline-block; margin-top: 4px; font-size: 10.5px; padding: 0 7px; margin-left: 6px; }
+.b.chg { border-color: #E0A100; background: #fffaf0; }
+.b.chg::after { content: "SỬA"; display: inline-block; margin-top: 4px; font-size: 10.5px; padding: 0 7px; background: #E0A100; color: #fff; border-radius: 999px; font-weight: 700; }
+.down { text-align: center; color: #9ca3af; font-size: 18px; margin: -6px 0 -2px 210px; }
+.key { display: flex; gap: 18px; font-size: 12.5px; margin-bottom: 12px; color: #374151; }
+.key span i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; border: 1.5px solid; }
+</style></head><body>
+<div class="key"><span><i style="border-color:#cfd8e3;background:#fafcff"></i>Đã có, giữ nguyên</span><span><i style="border-color:#E0A100;background:#fffaf0"></i>Sửa để bỏ giả định cứng</span><span><i style="border-color:#256abf;background:#f0f6fd"></i>Thành phần mới</span></div>
+
+<div class="lane"><div class="lab" style="background:#52514e">1. Nguồn dữ liệu<small>không sửa, chỉ đọc</small></div><div class="boxes">
+  <div class="b"><b>Moodle demo</b>moodle_src (PostgreSQL, rút gọn theo Moodle 3.9) + mock data sinh theo cấu hình</div>
+  <div class="b"><b>Moodle thật của trường</b>PostgreSQL hoặc MySQL/MariaDB · Moodle 3.9 → 4.x · bản sao chỉ đọc (read replica) hoặc bản dump</div>
+  <div class="b new"><b>Kênh gửi tin</b>SMTP của trường; Moodle Web Service (REST) – thật hoặc mô phỏng Moodle 3.9</div>
+  <div class="b new"><b>Bộ đồng bộ nguồn</b>chép các bảng cần dùng (theo hợp đồng dữ liệu) sang PostgreSQL staging; log chép tăng dần theo id</div></div></div>
+<div class="down">▼</div>
+<div class="lane"><div class="lab" style="background:#8a5a00">2. Lớp thích ứng nguồn<small>mọi khác biệt giữa các trường nằm ở đây</small></div><div class="boxes">
+  <div class="b new"><b>Hợp đồng dữ liệu nguồn</b>danh sách bảng/cột ETL cần, kiểu dữ liệu, plugin tùy chọn (mod_attendance)</div>
+  <div class="b new"><b>Kiểm tra sẵn sàng (preflight)</b>lệnh <code>source-check</code>: thiếu bảng, cấu trúc danh mục, vai trò, mã điểm danh, khoảng thời gian, số dòng</div>
+  <div class="b new"><b>Hồ sơ cấu hình nguồn</b><code>source_profile.yaml</code>: tiền tố bảng, cách xác định Khoa, lịch học kỳ, vai trò, mã điểm danh, MSSV, danh mục loại trừ</div></div></div>
+<div class="down">▼</div>
+<div class="lane"><div class="lab" style="background:#1c5cab">3. ETL<small>extract → transform → load</small></div><div class="boxes">
+  <div class="b chg"><b>Extract SQL</b>đọc tiền tố bảng, vai trò, cách tính Khoa từ hồ sơ cấu hình thay vì viết cứng</div>
+  <div class="b chg"><b>Transform</b>luật rủi ro đọc từ <code>etl/config.py</code> + ghi kèm <code>rule_version</code>; mã điểm danh theo cấu hình</div>
+  <div class="b"><b>Load / lịch chạy</b>upsert, advisory lock, watermark, retry, nhật ký ETL (giữ nguyên)</div>
+  <div class="b new"><b>Job mới</b><code>auto_prompt</code> (sau tính rủi ro) · <code>message_dispatch</code> (mỗi phút, gửi và thử lại)</div>
+  <div class="b new"><b>Chạy theo lô &amp; song song</b>chia môn theo lô, nhiều tiến trình; chỉ tính lại môn có log mới</div></div></div>
+<div class="down">▼</div>
+<div class="lane"><div class="lab" style="background:#256abf">4. CSDL phân tích<small>lms_analytics</small></div><div class="boxes">
+  <div class="b"><b>3 bảng fact hiện có</b>rủi ro SV, tiến độ môn theo ngày, lưu lượng theo giờ</div>
+  <div class="b new"><b>Bảng chiều tổ chức</b><code>dim_org_unit</code> (Khoa/Bộ môn) · <code>map_course_org</code> · <code>academic_term</code></div>
+  <div class="b new"><b>Phiên bản luật rủi ro</b>cột <code>rule_set_id</code> trong bảng rủi ro; danh mục chỉ số trong mã nguồn (<code>common/metrics_catalog.py</code>)</div>
+  <div class="b new"><b>Luật riêng &amp; tin gửi</b><code>risk_rule_set</code> · <code>message_template</code> · <code>outbound_message</code> · <code>auto_prompt_rule</code></div>
+  <div class="b new"><b>Phân vùng + tổng hợp</b>partition theo tháng cho bảng rủi ro; view/bảng tổng hợp xu hướng theo khoa-tuần</div></div></div>
+<div class="down">▼</div>
+<div class="lane"><div class="lab" style="background:#3a7bc8">5. Backend API<small>FastAPI</small></div><div class="boxes">
+  <div class="b"><b>API hiện có</b>KPI, theo khoa, môn, SV, lưu lượng, báo cáo, hệ thống (giữ nguyên hợp đồng)</div>
+  <div class="b new"><b>API so sánh &amp; xu hướng</b><code>/admin/compare/faculties</code> · <code>/admin/risk-trend</code> · <code>/teacher/courses/{id}/risk-trend</code></div>
+  <div class="b new"><b>API minh bạch</b><code>/meta/metrics</code> · <code>/meta/risk-rule</code> · <code>/meta/freshness</code></div>
+  <div class="b new"><b>API luật riêng &amp; can thiệp</b><code>/teacher/courses/{id}/risk-rules</code> · <code>/…/messages</code> · <code>/…/auto-prompts</code> · <code>/admin/channels</code></div></div></div>
+<div class="down">▼</div>
+<div class="lane"><div class="lab" style="background:#6b9bd6">6. Giao diện<small>React + Ant Design + Chart.js</small></div><div class="boxes">
+  <div class="b"><b>Trang/biểu đồ hiện có</b>Lưu lượng, Báo cáo, Hệ thống, Tiến độ lớp, Modal SV (giữ nguyên)</div>
+  <div class="b new"><b>Thành phần dùng lại</b><code>RiskTrendChart</code> · <code>ComparisonColumns</code> · <code>RiskShareBars</code> · <code>MetricInfo</code> · <code>LevelBreadcrumb</code></div>
+  <div class="b chg"><b>Trang tái cấu trúc</b>Tổng quan (Macro) · trang Khoa · trang Môn học · Cảnh báo GV thêm xu hướng · Thiết lập cảnh báo · Can thiệp</div></div></div>
+</body></html>

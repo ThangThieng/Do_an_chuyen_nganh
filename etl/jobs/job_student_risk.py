@@ -1,5 +1,6 @@
 """
 Job student_risk (SPEC 4.2: mỗi 2 giờ 07h–21h): tính snapshot rủi ro hôm nay (ghi đè) cho các môn đang diễn ra.
+Mỗi môn chấm theo bộ luật đang hoạt động của môn (luật riêng do giảng viên đặt) hoặc luật mặc định của trường.
 
     python -m etl.jobs.job_student_risk [--as-of 2026-11-06T10:30:00+07:00]
 """
@@ -15,6 +16,7 @@ from etl.extract.course_data import CourseDataset, extract_course_dataset
 from etl.jobs.runner import JobContext, JobStats, as_of_argument, cli_exit_code, configure_logging, run_job
 from etl.load import load_sql
 from etl.load.upsert import upsert
+from etl.rules import active_rule_sets, effective_params, ensure_global_rule
 from etl.transform.student_risk import (RISK_COLUMNS, RISK_JSON_COLUMNS, RISK_KEYS, build_risk_rows,
                                         student_metrics)
 
@@ -23,7 +25,12 @@ JOB_NAME = "student_risk"
 
 def compute(ctx: JobContext, dataset: CourseDataset | None = None) -> JobStats:
     ds = dataset if dataset is not None else extract_course_dataset(ctx.moodle, ctx.as_of)
-    rows = build_risk_rows(ds, student_metrics(ds), ctx.run_id)
+    with ctx.analytics.begin() as conn:
+        ensure_global_rule(conn)
+        global_rule, course_rules = active_rule_sets(conn)
+    rules = {cid: (rs.rule_set_id, effective_params(rs, global_rule)) for cid, rs in course_rules.items()}
+    rows = build_risk_rows(ds, student_metrics(ds), ctx.run_id, rules=rules,
+                           default_rule=(global_rule.rule_set_id, global_rule.params))
     with ctx.analytics.begin() as conn:
         changed = upsert(conn, "fact_student_risk_summary", RISK_COLUMNS, rows, RISK_KEYS,
                          json_columns=RISK_JSON_COLUMNS)

@@ -1,0 +1,87 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Tổng quan – phác thảo</title>
+<link rel="stylesheet" href="style.css">
+<script src="file:///D:/Do_an_chuyen_nganh/frontend/node_modules/chart.js/dist/chart.umd.js"></script>
+<script src="common.js"></script></head><body>
+<div class="top"><span class="logo"><i></i>LMS Analytics</span>
+  <nav><a class="on">Tổng quan</a><a>Lưu lượng</a><a>Báo cáo</a><a>Danh mục</a><a>Hệ thống ▾</a><a>Trợ giúp</a></nav>
+  <span class="right">Dữ liệu: 06/11/2026 10:30 · ETL: 06/11/2026 10:15 <span class="src">Nguồn dữ liệu</span> Quản trị Hệ thống</span></div>
+<div class="page">
+  <div class="legend-note"><span><span class="sw" style="outline:3px solid #256abf"></span>Viền xanh + nhãn = thành phần mới/điều chỉnh</span><span><span class="sw keep" style="display:inline-block"></span>Ô sọc = giữ nguyên như hiện tại</span><span class="muted">Số liệu 4 khoa ngoài CNTT là số liệu minh họa</span></div>
+  <div class="crumb new" data-new="MỚI · thanh cấp xem"><span class="lv on">Toàn trường</span><span class="sep">›</span><span class="lv">Khoa</span><span class="sep">›</span><span class="lv">Môn học</span><span class="sep">›</span><span class="lv">Sinh viên</span>
+    </div>
+  <div class="filter"><b>Bộ lọc:</b><span class="sel">Năm học 2026-2027 ▾</span><span class="sel">HK1 ▾</span><span class="sel" style="min-width:200px">Tất cả khoa ▾</span><span class="spacer"></span><span class="btn">Làm mới</span><span class="btn pri">Xuất báo cáo</span></div>
+
+  <div class="grid" style="grid-template-columns:repeat(6,1fr)">
+    <div class="kpi"><div class="l">Tổng môn học</div><div class="v">64</div><div class="h">5 khoa</div></div>
+    <div class="kpi"><div class="l">SV đăng ký</div><div class="v">9.553</div><div class="h">3.420 sinh viên</div></div>
+    <div class="kpi"><div class="l">SV tương tác</div><div class="v">8.700</div><div class="h">91,1%</div></div>
+    <div class="kpi"><div class="l">Online hiện tại</div><div class="v">58</div><div class="h">lúc 10:25</div></div>
+    <div class="kpi"><div class="l">Peak hôm nay</div><div class="v">1.798 req</div><div class="h">lúc 08:00</div></div>
+    <div class="kpi red new" data-new="ĐIỀU CHỈNH"><div class="l">SV nguy cơ cao</div><div class="v">1.337</div><div class="h">14,0% · <span class="delta-up">+0,5 điểm %</span> so với tuần trước</div></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:5fr 7fr;margin-top:16px">
+    <div class="card new" data-new="MỚI · cấp toàn trường">
+      <div class="hd"><h3>Phân bố mức rủi ro – toàn trường</h3><span class="link">Nguồn &amp; cách tính</span><span class="seg"><span class="on">Biểu đồ</span><span>Bảng</span></span></div>
+      <div class="bd" style="display:flex;gap:18px;align-items:center">
+        <div class="donut"><canvas id="d1"></canvas><div class="center"></div></div>
+        <div style="flex:1"><div id="lg1"></div></div>
+      </div>
+    </div>
+    <div class="card new" data-new="MỚI · xu hướng">
+      <div class="hd"><h3>Xu hướng mức rủi ro theo tuần học</h3><span class="link">Nguồn &amp; cách tính</span><span class="seg"><span class="on">Biểu đồ</span><span>Bảng</span></span></div>
+      <div class="bd" style="height:236px"><canvas id="tr1"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card new" data-new="MỚI · so sánh giữa các Khoa" style="margin-top:16px">
+    <div class="hd"><h3>So sánh giữa các Khoa</h3><span class="link">Nguồn &amp; cách tính</span></div>
+    <div class="bd">
+      <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+        <div><b>Quy mô (lượt ghi danh)</b><div style="height:230px"><canvas id="c1"></canvas></div></div>
+        <div><b>Tỷ lệ tương tác</b><div style="height:230px"><canvas id="c2"></canvas></div></div>
+        <div><b>Phân bố mức rủi ro</b><div style="height:230px"><canvas id="c3"></canvas></div></div>
+      </div>
+      <table class="t" style="margin-top:12px">
+        <tr><th>Khoa</th><th class="r">Số môn</th><th class="r">Lượt ghi danh</th><th class="r">SV duy nhất</th><th class="r">Tỷ lệ tương tác</th><th class="r">% Nguy cơ cao</th><th class="r">So với tuần trước</th></tr>
+        <tbody id="tb"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:7fr 5fr;margin-top:16px">
+    <div class="keep" style="height:120px">Lưu lượng truy cập (24 giờ / 7 ngày)<br><span class="small muted">GIỮ NGUYÊN nội dung – chỉ dời xuống nhóm “Hoạt động hệ thống”</span></div>
+    <div class="keep" style="height:120px">Heatmap giờ × thứ (4 tuần)<br><span class="small muted">GIỮ NGUYÊN nội dung – chỉ dời vị trí</span></div>
+  </div>
+  <div class="hint" style="margin-top:8px">Bảng “Thống kê phân cấp Khoa ▸ Môn ▸ Sinh viên” không còn mở rộng tại trang này: cấp Môn và cấp Sinh viên chuyển sang trang riêng (xem phác thảo trang Khoa và trang Môn học).</div>
+</div>
+<script>
+const F = [
+  { n: "CNTT", full: "Khoa Công nghệ Thông tin", m: 15, e: 2383, a: 2260, u: 500, r: 408, y: 610, d: "+0,4" },
+  { n: "Kinh tế", full: "Khoa Kinh tế – QTKD", m: 18, e: 3120, a: 2780, u: 1050, r: 374, y: 690, d: "+0,8" },
+  { n: "Ngoại ngữ", full: "Khoa Ngoại ngữ", m: 12, e: 1650, a: 1580, u: 720, r: 132, y: 300, d: "−0,2" },
+  { n: "Luật", full: "Khoa Luật", m: 10, e: 1420, a: 1260, u: 640, r: 199, y: 330, d: "+0,6" },
+  { n: "Sinh học", full: "Khoa Sinh học", m: 9, e: 980, a: 820, u: 510, r: 224, y: 240, d: "+1,1" },
+];
+const tot = F.reduce((s, f) => [s[0] + f.r, s[1] + f.y, s[2] + f.e - f.r - f.y], [0, 0, 0]);
+const T = tot[0] + tot[1] + tot[2];
+doughnut("d1", tot, T.toLocaleString("vi-VN"), "lượt ghi danh");
+riskLegend(document.getElementById("lg1"), tot, T);
+riskTrend("tr1", ["T1","T2","T3","T4","T5","T6","T7","T8","T9"],
+  [5.1,7.2,9.0,10.6,11.8,12.6,13.1,13.5,14.0], [17.5,19.8,21.4,22.6,23.3,23.9,24.3,24.6,24.8], [77.4,73.0,69.6,66.8,64.9,63.5,62.6,61.9,61.2]);
+const labels = F.map((f) => f.n);
+new Chart(c1, { type: "bar", data: { labels, datasets: [
+  { label: "Có tương tác", data: F.map((f) => f.a), backgroundColor: BLUE, borderRadius: 0, maxBarThickness: 38 },
+  { label: "Không tương tác", data: F.map((f) => f.e - f.a), backgroundColor: NEUTRAL, borderRadius: 4, maxBarThickness: 38 }] },
+  options: { plugins: { legend: { position: "top", align: "start" } }, scales: { x: ax({ stacked: true, grid: { display: false } }), y: ax({ stacked: true, ticks: { callback: (v) => v.toLocaleString("vi-VN") } }) } } });
+const rates = F.map((f) => +(100 * f.a / f.e).toFixed(1));
+new Chart(c2, { type: "bar", data: { labels, datasets: [{ label: "Tỷ lệ tương tác", data: rates, backgroundColor: BLUE, borderRadius: 4, maxBarThickness: 38 }] },
+  options: { layout: { padding: { top: 26 } }, plugins: { legend: { display: false }, topLabels: { enabled: true, format: (v) => pct(v) }, refLine: { value: 91.1, label: "TB toàn trường 91,1%" } },
+    scales: { x: ax({ grid: { display: false } }), y: ax({ min: 0, max: 100, ticks: { callback: (v) => `${v}%` } }) } }, plugins: [topLabels, refLine] });
+new Chart(c3, { type: "bar", data: { labels, datasets: [
+  { label: "Nguy cơ cao", data: F.map((f) => +(100 * f.r / f.e).toFixed(1)), backgroundColor: RISK.RED.color, maxBarThickness: 38, borderColor: "#fff", borderWidth: { top: 2 } },
+  { label: "Cần lưu ý", data: F.map((f) => +(100 * f.y / f.e).toFixed(1)), backgroundColor: RISK.YELLOW.color, maxBarThickness: 38, borderColor: "#fff", borderWidth: { top: 2 } },
+  { label: "An toàn", data: F.map((f) => +(100 * (f.e - f.r - f.y) / f.e).toFixed(1)), backgroundColor: RISK.GREEN.color, maxBarThickness: 38 }] },
+  options: { plugins: { legend: { position: "top", align: "start" } }, scales: { x: ax({ stacked: true, grid: { display: false } }), y: ax({ stacked: true, max: 100, ticks: { callback: (v) => `${v}%` } }) } } });
+document.getElementById("tb").innerHTML = F.map((f) => `<tr><td><b>${f.full}</b></td><td class="r">${f.m}</td><td class="r">${f.e.toLocaleString("vi-VN")}</td><td class="r">${f.u.toLocaleString("vi-VN")}</td><td class="r">${pct(100 * f.a / f.e)}</td><td class="r">${pct(100 * f.r / f.e)}</td><td class="r ${f.d.startsWith("+") ? "delta-up" : "delta-down"}">${f.d} điểm %</td></tr>`).join("");
+</script></body></html>

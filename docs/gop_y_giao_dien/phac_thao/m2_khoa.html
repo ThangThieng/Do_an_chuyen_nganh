@@ -1,0 +1,75 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Trang Khoa – phác thảo</title>
+<link rel="stylesheet" href="style.css">
+<script src="file:///D:/Do_an_chuyen_nganh/frontend/node_modules/chart.js/dist/chart.umd.js"></script>
+<script src="common.js"></script></head><body>
+<div class="top"><span class="logo"><i></i>LMS Analytics</span>
+  <nav><a class="on">Tổng quan</a><a>Lưu lượng</a><a>Báo cáo</a><a>Danh mục</a><a>Hệ thống ▾</a><a>Trợ giúp</a></nav>
+  <span class="right">Dữ liệu: 06/11/2026 10:30 · ETL: 06/11/2026 10:15 <span class="src">Nguồn dữ liệu</span> Quản trị Hệ thống</span></div>
+<div class="page">
+  <div class="legend-note"><span class="muted">URL riêng: <code>/admin/faculties/1</code> · số liệu môn lấy từ dữ liệu demo hiện tại; số “Cần lưu ý” của các môn trừ IT001 là minh họa</span></div>
+  <div class="crumb new" data-new="MỚI · trang cấp Khoa"><span class="lv">Toàn trường</span><span class="sep">›</span><span class="lv on">Khoa</span><span class="sep">›</span><span class="lv">Môn học</span><span class="sep">›</span><span class="lv">Sinh viên</span>
+    <span class="path"><a>Toàn trường</a> › <b>Khoa Công nghệ Thông tin</b></span></div>
+  <div class="filter"><b>Bộ lọc:</b><span class="sel">Năm học 2026-2027 ▾</span><span class="sel">HK1 ▾</span><span class="sel" style="min-width:220px">Bộ môn: Tất cả ▾</span><span class="spacer"></span><span class="btn pri">Xuất báo cáo</span></div>
+
+  <div class="grid" style="grid-template-columns:repeat(5,1fr)">
+    <div class="kpi"><div class="l">Số môn</div><div class="v">15</div><div class="h">4 bộ môn</div></div>
+    <div class="kpi"><div class="l">Lượt ghi danh</div><div class="v">2.383</div><div class="h">500 SV duy nhất</div></div>
+    <div class="kpi"><div class="l">Tỷ lệ tương tác</div><div class="v">94,8%</div><div class="h">TB toàn trường 91,1%</div></div>
+    <div class="kpi"><div class="l">Nộp bài (TB môn)</div><div class="v">78,4%</div><div class="h">Chuyên cần 88,8%</div></div>
+    <div class="kpi red"><div class="l">SV nguy cơ cao</div><div class="v">408</div><div class="h">17,1% · <span class="delta-up">+0,4 điểm %</span> so với tuần trước</div></div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:5fr 7fr;margin-top:16px">
+    <div class="card new" data-new="DÙNG LẠI thành phần">
+      <div class="hd"><h3>Phân bố mức rủi ro – Khoa CNTT</h3><span class="link">Nguồn &amp; cách tính</span></div>
+      <div class="bd" style="display:flex;gap:18px;align-items:center">
+        <div class="donut"><canvas id="d1"></canvas><div class="center"></div></div><div style="flex:1" id="lg1"></div></div>
+    </div>
+    <div class="card new" data-new="DÙNG LẠI thành phần">
+      <div class="hd"><h3>Xu hướng mức rủi ro theo tuần – Khoa CNTT</h3><span class="link">Nguồn &amp; cách tính</span></div>
+      <div class="bd" style="height:214px"><canvas id="tr1"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card new" data-new="MỚI · so sánh các môn trong khoa" style="margin-top:16px">
+    <div class="hd"><h3>So sánh các môn trong khoa</h3><span class="link">Nguồn &amp; cách tính</span></div>
+    <div class="bd">
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div><div style="display:flex;align-items:center;gap:10px"><b>Chỉ số theo môn</b><span class="seg"><span>Tỷ lệ tương tác</span><span class="on">Nộp bài</span><span>Chuyên cần</span></span></div>
+          <div style="height:430px"><canvas id="c1"></canvas></div></div>
+        <div><div><b>Phân bố mức rủi ro theo môn</b></div>
+          <div style="height:440px"><canvas id="c2"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="keep" style="height:96px;margin-top:16px">Bảng môn học của khoa (Mã môn, Tên môn, Bộ môn, Đăng ký, Tương tác, Tỷ lệ, Nộp bài, Chuyên cần, Nguy cơ đỏ, Xem SV)<br><span class="small muted">GIỮ NGUYÊN các cột hiện có · thêm cột “% Nguy cơ cao” · nút “Xem SV” mở trang Môn học (URL riêng) thay vì mở rộng tại chỗ</span></div>
+</div>
+<script>
+const C = [
+  ["IT015","An toàn thông tin",114,111,79.2,null,10,22],["IT011","Kho dữ liệu & KPDL",186,180,81.0,90.4,26,40],
+  ["IT001","Nhập môn lập trình",203,196,79.8,88.0,39,51],["IT003","CTDL & giải thuật",197,189,77.5,88.4,39,47],
+  ["IT010","Trí tuệ nhân tạo",122,117,78.7,88.8,24,30],["IT006","PTTK HTTT",204,194,77.9,90.5,33,49],
+  ["IT005","Hệ quản trị CSDL",221,210,79.0,89.6,34,52],["IT013","Mạng máy tính",115,109,77.6,86.1,23,29],
+  ["IT012","Kiểm thử phần mềm",132,125,80.3,90.4,22,31],["IT007","Lập trình HĐT",148,139,78.7,88.7,20,37],
+  ["IT014","Hệ điều hành",164,154,77.4,88.9,30,41],["IT008","Công nghệ phần mềm",143,134,79.5,90.3,22,36],
+  ["IT002","Toán rời rạc",139,130,74.8,87.5,31,36],["IT009","Lập trình Web",161,149,80.8,88.4,25,40],
+  ["IT004","Cơ sở dữ liệu",134,123,74.1,87.1,30,34],
+];
+const red = C.reduce((s, c) => s + c[6], 0), yel = C.reduce((s, c) => s + c[7], 0), tot = 2383;
+doughnut("d1", [red, yel, tot - red - yel], "2.383", "lượt ghi danh");
+riskLegend(document.getElementById("lg1"), [red, yel, tot - red - yel], tot);
+riskTrend("tr1", ["T1","T2","T3","T4","T5","T6","T7","T8","T9"],
+  [6.2,8.9,11.5,13.4,14.9,15.8,16.4,16.7,17.1], [19.0,21.5,23.0,24.1,24.8,25.1,25.4,25.6,25.6], [74.8,69.6,65.5,62.5,60.3,59.1,58.2,57.7,57.3]);
+const bySub = [...C].sort((a, b) => a[4] - b[4]);
+new Chart(c1, { type: "bar", data: { labels: bySub.map((c) => `${c[0]} ${c[1]}`), datasets: [{ label: "Nộp bài", data: bySub.map((c) => c[4]), backgroundColor: BLUE, borderRadius: 4, maxBarThickness: 18 }] },
+  options: { indexAxis: "y", layout: { padding: { right: 40, top: 16 } }, plugins: { legend: { display: false }, topLabels: { enabled: true, horizontal: true, format: (v) => pct(v) }, refLine: { horizontal: true, value: 78.4, label: "TB khoa 78,4%" } },
+    scales: { x: ax({ min: 0, max: 100, ticks: { callback: (v) => `${v}%` } }), y: ax({ grid: { display: false }, ticks: { color: INK } }) } }, plugins: [topLabels, refLine] });
+const byRed = [...C].sort((a, b) => b[6] / b[2] - a[6] / a[2]);
+const p = (i) => byRed.map((c) => +(100 * c[i] / c[2]).toFixed(1));
+new Chart(c2, { type: "bar", data: { labels: byRed.map((c) => `${c[0]} ${c[1]}`), datasets: [
+  { label: "Nguy cơ cao", data: p(6), backgroundColor: RISK.RED.color, maxBarThickness: 18, borderColor: "#fff", borderWidth: { right: 2 } },
+  { label: "Cần lưu ý", data: p(7), backgroundColor: RISK.YELLOW.color, maxBarThickness: 18, borderColor: "#fff", borderWidth: { right: 2 } },
+  { label: "An toàn", data: byRed.map((c) => +(100 - 100 * (c[6] + c[7]) / c[2]).toFixed(1)), backgroundColor: RISK.GREEN.color, maxBarThickness: 18 }] },
+  options: { indexAxis: "y", plugins: { legend: { position: "top", align: "start" } },
+    scales: { x: ax({ stacked: true, max: 100, ticks: { callback: (v) => `${v}%` } }), y: ax({ stacked: true, grid: { display: false }, ticks: { color: INK } }) } } });
+</script></body></html>

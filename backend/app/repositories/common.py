@@ -10,7 +10,8 @@ from backend.app.core.config import TZ
 from backend.app.core.db import fetch_all, fetch_one, fetch_value
 from etl.transform.semester import academic_term
 
-ETL_JOBS = ("traffic", "course_progress", "student_risk", "nightly", "maintenance", "backfill")
+ETL_JOBS = ("traffic", "course_progress", "student_risk", "nightly", "maintenance", "backfill", "auto_prompt",
+            "message_dispatch")
 
 
 @cached

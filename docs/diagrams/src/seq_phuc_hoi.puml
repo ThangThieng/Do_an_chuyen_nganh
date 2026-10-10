@@ -1,0 +1,44 @@
+@startuml seq_phuc_hoi
+!include _style.iuml
+autonumber
+actor "Quản trị viên" as QT
+participant "AdminBackups\n(React)" as FE
+participant "system router\n(FastAPI)" as API
+participant "backup service" as SV
+participant "File zip\n(thư mục sao lưu)" as F
+database "lms_analytics" as DB
+
+QT -> FE : nhấn "Phục hồi" ở một bản sao lưu
+FE --> QT : hộp thoại cảnh báo + ô xác nhận
+QT -> FE : gõ lại đúng tên file
+FE -> API : POST /admin/backups/{name}/restore {confirm_name}
+alt confirm_name khác name
+  API --> FE : 422
+else khớp
+  API -> SV : restore_backup(name)
+  SV -> F : kiểm tra tên theo mẫu, đọc manifest.json
+  SV -> DB : pg_try_advisory_lock(sao lưu)
+  alt đang có thao tác khác
+    SV --> API : BackupBusy -> 409
+  else
+    SV -> DB : SELECT lịch sử migration
+    alt khác phiên bản cấu trúc
+      SV --> API : BackupError -> 409 (dữ liệu giữ nguyên)
+    else cùng phiên bản
+      SV -> DB : BEGIN; TRUNCATE 8 bảng
+      loop từng bảng (bảng cha trước)
+        SV -> F : đọc <bảng>.csv
+        SV -> DB : COPY ... FROM STDIN
+        SV -> DB : SELECT COUNT(*) so với manifest
+      end
+      SV -> DB : setval() cho cột identity
+      SV -> DB : COMMIT (lỗi bất kỳ -> ROLLBACK)
+      SV -> DB : pg_advisory_unlock
+      API -> API : clear_cache()
+      API --> FE : 200 {tables, total_rows}
+      FE -> FE : làm mới mọi truy vấn đang lưu
+      FE --> QT : "Phục hồi hoàn tất"
+    end
+  end
+end
+@enduml

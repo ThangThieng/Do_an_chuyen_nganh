@@ -1,0 +1,70 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thiết lập cảnh báo – phác thảo</title>
+<link rel="stylesheet" href="style.css">
+<script src="file:///D:/Do_an_chuyen_nganh/frontend/node_modules/chart.js/dist/chart.umd.js"></script>
+<script src="common.js"></script>
+<style>
+.inp { display:inline-block; border:1px solid #d9d9d9; border-radius:6px; padding:2px 8px; min-width:46px; text-align:right; background:#fff; font-variant-numeric: tabular-nums; }
+.rule { display:flex; align-items:center; gap:8px; border:1px solid #e5e7eb; border-radius:8px; padding:8px 10px; margin-bottom:8px; background:#fcfcfd; }
+.rule .x { margin-left:auto; color:#6b6a65; font-size:12px; }
+.wbar { display:flex; height:10px; border-radius:5px; overflow:hidden; margin-top:8px; }
+.wbar span { display:block; height:100%; }
+table.t td .inp { margin: 0 2px; }
+.prev { display:grid; grid-template-columns: 90px 1fr 46px; gap:8px; align-items:center; font-size:13px; margin:6px 0; }
+.stack { display:flex; height:16px; border-radius:4px; overflow:hidden; }
+.stack span { height:100%; display:block; border-right:2px solid #fff; }
+</style></head><body>
+<div class="top"><span class="logo"><i></i>LMS Analytics</span><span class="sel" style="min-width:300px">IT006 – Phân tích thiết kế HTTT ▾</span>
+  <nav><a>Cảnh báo</a><a>Tiến độ lớp</a><a class="on">Thiết lập cảnh báo</a><a>Can thiệp</a><a>Trợ giúp</a></nav>
+  <span class="right">Dữ liệu: 06/11/2026 10:30 <span class="src">Nguồn dữ liệu</span> Phạm Thu Hà</span></div>
+<div class="page">
+  <div class="legend-note"><span class="muted">Màn hình mới (chức năng 1). Số liệu xem trước là minh họa cho môn đồ án/thực hành của dữ liệu mô phỏng.</span></div>
+  <div class="grid" style="grid-template-columns:8fr 5fr;align-items:start">
+    <div class="grid">
+      <div class="card"><div class="hd"><h3>Mẫu luật cho môn này</h3><span class="link">Mẫu là gì?</span></div>
+        <div class="bd"><span class="seg"><span>Mặc định của trường</span><span>Lý thuyết</span><span>Thực hành</span><span class="on">Đồ án</span><span>Tùy chỉnh</span></span>
+          <div class="hint">Mẫu “Đồ án”: nặng về nộp báo cáo tiến độ hằng tuần. Có thể chỉnh từng giá trị bên dưới; khi chỉnh, mẫu chuyển thành “Tùy chỉnh”.</div></div></div>
+
+      <div class="card"><div class="hd"><h3>Ngưỡng của 3 tiêu chí</h3></div>
+        <div class="bd"><table class="t">
+          <tr><th>Tiêu chí</th><th>Cần lưu ý (1 điểm)</th><th>Nguy cơ cao (2 điểm)</th><th class="r">Trọng số</th></tr>
+          <tr><td>Vắng học</td><td>vắng từ <span class="inp">15</span> % số buổi</td><td>từ <span class="inp">25</span> %</td><td class="r"><span class="inp">30</span> %</td></tr>
+          <tr><td>Không tương tác</td><td>quá <span class="inp">7</span> ngày chưa vào, hoặc truy cập 14 ngày dưới <span class="inp">50</span> % trung vị lớp</td><td>quá <span class="inp">14</span> ngày hoặc chưa từng vào</td><td class="r"><span class="inp">20</span> %</td></tr>
+          <tr><td>Thiếu bài tập</td><td>thiếu từ <span class="inp">15</span> % số bài đã tới hạn</td><td>từ <span class="inp">40</span> %</td><td class="r"><span class="inp">50</span> %</td></tr>
+        </table>
+        <div class="wbar"><span style="width:30%;background:#2a78d6"></span><span style="width:20%;background:#eb6834"></span><span style="width:50%;background:#1baf7a"></span></div>
+        <div class="hint">Tổng trọng số 100%. Giới hạn cho phép: mỗi trọng số 10–60%, ngưỡng nằm trong khoảng do nhà trường quy định.</div></div></div>
+
+      <div class="card"><div class="hd"><h3>Luật bổ sung của môn</h3><span class="btn" style="margin-left:auto">Thêm luật</span></div>
+        <div class="bd">
+          <div class="rule">Bỏ nộp <span class="inp">2</span> bài liên tiếp <span class="muted">→</span> <span class="badge b-red">Nguy cơ cao</span><span class="x">Xóa</span></div>
+          <div class="rule">Vắng từ <span class="inp">2</span> buổi của <span class="sel" style="min-width:180px">Điểm danh thực hành ▾</span> <span class="muted">→</span> <span class="badge b-red">Nguy cơ cao</span><span class="x">Xóa</span></div>
+          <div class="hint">Luật bổ sung chỉ nâng mức rủi ro, không hạ. Luật xếp mức chung của trường (đỏ khi không tương tác đạt 2 điểm, hoặc từ 2 tiêu chí đạt 2 điểm, hoặc tổng từ 4) vẫn áp dụng.</div>
+        </div></div>
+    </div>
+
+    <div class="grid">
+      <div class="card new" data-new="Xem trước trước khi lưu"><div class="hd"><h3>Tác động nếu áp dụng</h3></div>
+        <div class="bd">
+          <div class="prev"><span>Hiện tại</span><div class="stack"><span style="width:16%;background:#D64545"></span><span style="width:24%;background:#E0A100"></span><span style="width:60%;background:#2E9D5B"></span></div><span class="tab small">33 đỏ</span></div>
+          <div class="prev"><span>Sau thay đổi</span><div class="stack"><span style="width:24%;background:#D64545"></span><span style="width:22%;background:#E0A100"></span><span style="width:54%;background:#2E9D5B"></span></div><span class="tab small">49 đỏ</span></div>
+          <div class="small muted" style="margin:10px 0 6px">18 sinh viên đổi mức</div>
+          <table class="t" style="font-size:12.5px">
+            <tr><th>MSSV</th><th>Họ tên</th><th>Từ → sang</th><th>Do luật</th></tr>
+            <tr><td>2212104</td><td>Trần Gia Huy</td><td>Vàng → Đỏ</td><td>bỏ 2 bài liên tiếp</td></tr>
+            <tr><td>2212188</td><td>Lê Thu Hà</td><td>Vàng → Đỏ</td><td>vắng 2 buổi thực hành</td></tr>
+            <tr><td>2212240</td><td>Ngô Minh Tuấn</td><td>Xanh → Vàng</td><td>thiếu 1/5 bài (20%)</td></tr>
+          </table>
+          <div style="margin-top:12px"><div class="small muted">Lý do thay đổi (lưu vào lịch sử)</div><div class="sel" style="width:100%;margin-top:4px;color:#6b6a65">Môn đồ án nộp báo cáo tiến độ hằng tuần</div></div>
+          <div style="display:flex;gap:8px;margin-top:12px"><span class="btn pri">Lưu và áp dụng</span><span class="btn">Khôi phục mặc định</span></div>
+          <div class="hint">Áp dụng ngay cho số liệu hôm nay; các ngày trước giữ luật cũ (trên đồ thị xu hướng có vạch đánh dấu ngày đổi luật).</div>
+        </div></div>
+      <div class="card"><div class="hd"><h3>Lịch sử</h3></div>
+        <div class="bd"><table class="t" style="font-size:12.5px">
+          <tr><th>Phiên bản</th><th>Người đặt</th><th>Thời điểm</th></tr>
+          <tr><td>Riêng v2 (đang dùng)</td><td>Phạm Thu Hà</td><td>05/11/2026 08:12</td></tr>
+          <tr><td>Riêng v1</td><td>Phạm Thu Hà</td><td>21/09/2026 14:30</td></tr>
+          <tr><td>Mặc định trường v1.1</td><td>Hệ thống</td><td>15/09/2026</td></tr>
+        </table></div></div>
+    </div>
+  </div>
+</div></body></html>

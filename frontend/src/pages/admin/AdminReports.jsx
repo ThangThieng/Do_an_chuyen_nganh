@@ -21,7 +21,7 @@ const RENDERERS = {
   percent: (v) => fmtPercent(v, 2, "–"),
   date: fmtDate,
   datetime: fmtDateTime,
-  bool: (v) => (v ? "▲ Có" : ""),
+  bool: (v) => (v ? "Có" : ""),
   list: (v) => (v ?? []).join("; "),
   risk_level: (v) => <RiskBadge level={v} />,
   days: fmtDaysSince,
@@ -95,7 +95,7 @@ export default function AdminReports() {
             {form.report_type === "risk" && (
               <Select aria-label="Mức rủi ro" style={{ width: 170 }} allowClear placeholder="Mọi mức rủi ro" value={form.risk_level}
                 onChange={(risk_level) => set({ risk_level })}
-                options={RISK_LEVELS.map((l) => ({ value: l, label: `${RISK[l].icon} ${RISK[l].label}` }))} />
+                options={RISK_LEVELS.map((l) => ({ value: l, label: RISK[l].label }))} />
             )}
             <DatePicker aria-label="Ngày số liệu" placeholder="Ngày số liệu (mới nhất)" format="DD/MM/YYYY" value={form.to} style={{ width: 210 }}
               onChange={(to) => set({ to })} disabledDate={(d) => asOf && d.isAfter(asOf, "day")} />
@@ -107,8 +107,8 @@ export default function AdminReports() {
         )}
         <span className="spacer" />
         <Button type="primary" onClick={() => { setPage((p) => ({ ...p, current: 1 })); setApplied(params); }}>Xem trước</Button>
-        <Button onClick={() => onExport("xlsx")} loading={exporting === "xlsx"}>⬇ Xuất Excel</Button>
-        <Button onClick={() => onExport("pdf")} loading={exporting === "pdf"}>⬇ Xuất PDF</Button>
+        <Button onClick={() => onExport("xlsx")} loading={exporting === "xlsx"}>Xuất Excel</Button>
+        <Button onClick={() => onExport("pdf")} loading={exporting === "pdf"}>Xuất PDF</Button>
       </div>
 
       <Card

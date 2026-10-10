@@ -1,0 +1,36 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Luồng gửi tin</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body { width:1440px; background:#fff; padding:18px 24px; }
+.row { display:flex; align-items:stretch; gap:10px; }
+.box { border:1.5px solid #cfd8e3; border-radius:10px; padding:10px 12px; background:#fafcff; font-size:12.5px; flex:1; }
+.box b { display:block; font-size:13.5px; margin-bottom:3px; }
+.arr { display:flex; align-items:center; color:#9ca3af; font-size:22px; }
+.lane { font-weight:700; font-size:13px; color:#1c4f8f; margin:14px 0 6px; }
+.mode { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+.mode .box { background:#fff; }
+.m1 { border-color:#9aa39a; } .m2 { border-color:#E0A100; background:#fffaf0 !important; } .m3 { border-color:#D64545; background:#fff5f5 !important; }
+</style></head><body>
+<div class="lane">1. Tạo tin</div>
+<div class="row">
+  <div class="box"><b>Giảng viên bấm gửi</b>chọn sinh viên, kênh, mẫu; xem trước và sửa nội dung</div>
+  <div class="box"><b>Quy tắc nhắc tự động</b>job <code>auto_prompt</code> chạy sau mỗi lần tính rủi ro: không truy cập ≥ N ngày, vừa chuyển sang đỏ, quá hạn nộp bài</div>
+  <div class="arr">→</div>
+  <div class="box"><b>Mẫu tin + số liệu cảnh báo</b>điền tên, môn, số buổi vắng, bài chưa nộp, hạn liên hệ… từ snapshot rủi ro mới nhất</div>
+  <div class="arr">→</div>
+  <div class="box"><b>Hàng đợi gửi (outbox)</b>bảng <code>outbound_message</code>: một dòng mỗi sinh viên × kênh; khóa chống trùng; trạng thái CHỜ DUYỆT / CHỜ GỬI</div>
+</div>
+<div class="lane">2. Gửi đi (cùng một mã nguồn cho dữ liệu mô phỏng và dữ liệu thật – chỉ khác cấu hình)</div>
+<div class="row">
+  <div class="box"><b>Bộ gửi email</b>SMTP chuẩn (STARTTLS/SSL), Reply-To là email giảng viên, UTF-8; nhận về Message-ID</div>
+  <div class="box"><b>Bộ gửi tin nhắn Moodle</b>REST <code>/webservice/rest/server.php</code>, hàm <code>core_message_send_instant_messages</code>; nhận về mã tin nhắn (msgid)</div>
+  <div class="arr">→</div>
+  <div class="box"><b>Thử lại và ghi nhận</b>lỗi tạm thời thử lại sau 1, 5, 15 phút; lỗi vĩnh viễn (sai địa chỉ, sinh viên chặn tin) báo ngay; mọi lần gửi ghi vào nhật ký can thiệp</div>
+</div>
+<div class="lane">3. Chế độ gửi (biến môi trường – không sửa mã)</div>
+<div class="mode">
+  <div class="box m1"><b>Kiểm thử offline</b>Email lưu thành file .eml trong thư mục; Moodle gửi tới máy chủ Moodle 3.9 mô phỏng (ghi vào đúng bảng <code>mdl_messages</code>). Dùng khi chạy demo không có Internet.</div>
+  <div class="box m2"><b>Kiểm thử chuyển hướng</b>Gửi qua SMTP thật nhưng mọi email được chuyển tới hộp thư kiểm thử của nhóm (ghi rõ người nhận gốc). Chứng minh đường gửi thật hoạt động mà không gửi nhầm sinh viên.</div>
+  <div class="box m3"><b>Vận hành thật</b>Gửi tới email sinh viên và Moodle của trường. Chỉ bật được khi: dữ liệu là dữ liệu thật (không có LMS_AS_OF), đã kiểm tra kết nối thành công, và quản trị bật cờ cho phép.</div>
+</div>
+</body></html>

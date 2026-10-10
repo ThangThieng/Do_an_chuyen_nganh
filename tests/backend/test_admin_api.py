@@ -45,24 +45,38 @@ def test_kpis_default_term_and_filters(client, admin_headers, courses):
                       headers=admin_headers).status_code == 422
 
 
+def _by_faculty(courses) -> dict[int, list[dict]]:
+    groups: dict[int, list[dict]] = {}
+    for c in courses:
+        groups.setdefault(c["faculty_id"], []).append(c)
+    return groups
+
+
 def test_enrollment_by_faculty(client, admin_headers, courses):
     body = client.get(f"{API}/admin/enrollment/by-faculty", params=TERM, headers=admin_headers).json()
-    assert len(body["items"]) == len({c["faculty_id"] for c in courses})
-    item = body["items"][0]
-    assert item["enrolled"] == sum(c["enrolled"] for c in courses)
-    assert item["inactive"] == item["enrolled"] - item["active"]
-    assert item["course_count"] == len(courses)
+    groups = _by_faculty(courses)
+    assert len(body["items"]) == len(groups) == 5
+    for item in body["items"]:
+        own = groups[item["faculty_id"]]
+        assert item["enrolled"] == sum(c["enrolled"] for c in own)
+        assert item["active"] == sum(c["active"] for c in own)
+        assert item["inactive"] == item["enrolled"] - item["active"]
+        assert item["course_count"] == len(own)
+    assert sum(i["enrolled"] for i in body["items"]) == sum(c["enrolled"] for c in courses)
 
 
 def test_faculty_courses_drill_down(client, admin_headers, courses):
-    faculty_id = courses[0]["faculty_id"]
-    url = f"{API}/admin/enrollment/faculties/{faculty_id}/courses"
-    items = client.get(url, params=TERM, headers=admin_headers).json()["items"]
-    assert len(items) == len(courses)
-    rates = [i["active_rate"] for i in items]
-    assert rates == sorted(rates, reverse=True)
-    by_code = client.get(url, params={**TERM, "sort": "shortname", "order": "asc"}, headers=admin_headers).json()["items"]
-    assert [i["shortname"] for i in by_code] == sorted(c["course_shortname"] for c in courses)
+    for faculty_id, own in _by_faculty(courses).items():
+        url = f"{API}/admin/enrollment/faculties/{faculty_id}/courses"
+        body = client.get(url, params=TERM, headers=admin_headers).json()
+        items = body["items"]
+        assert sorted(i["course_id"] for i in items) == sorted(c["course_id"] for c in own)
+        rates = [i["active_rate"] for i in items]
+        assert rates == sorted(rates, reverse=True)
+        assert body["summary"]["enrolled"] == sum(c["enrolled"] for c in own)
+        assert {i["rule_scope"] for i in items} <= {"GLOBAL", "COURSE"}
+        by_code = client.get(url, params={**TERM, "sort": "shortname", "order": "asc"}, headers=admin_headers).json()["items"]
+        assert [i["shortname"] for i in by_code] == sorted(c["course_shortname"] for c in own)
     assert client.get(url, params={"sort": "course_id; DROP"}, headers=admin_headers).status_code == 422
     assert client.get(f"{API}/admin/enrollment/faculties/999999/courses", headers=admin_headers).status_code == 404
 

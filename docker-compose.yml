@@ -22,6 +22,25 @@ x-app-env: &app-env
   MOODLE_DB_MAINTENANCE_DB: postgres
   BACKEND_JWT_SECRET: ${BACKEND_JWT_SECRET:?Đặt BACKEND_JWT_SECRET (>= 32 ký tự) trong docker/.env}
   BACKEND_CORS_ORIGINS: http://localhost:${WEB_PORT:-8080}
+  # Kênh gửi tin (v1.2) – mặc định an toàn: email ghi file .eml, tin nhắn Moodle tới máy chủ mô phỏng.
+  # Vận hành thật: đặt MAIL_TRANSPORT=smtp + SMTP_*, MOODLE_WS_URL/TOKEN của trường, MOODLE_WS_ENV=live,
+  # MESSAGING_ALLOW_LIVE=true, LMS_AS_OF rỗng, rồi kiểm tra kênh ở Hệ thống › Kênh gửi tin.
+  MAIL_TRANSPORT: ${MAIL_TRANSPORT:-file}
+  MAIL_FILE_DIR: /app/var/mail_outbox
+  SMTP_HOST: ${SMTP_HOST-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+  SMTP_USERNAME: ${SMTP_USERNAME-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD-}
+  MAIL_FROM: ${MAIL_FROM-}
+  MAIL_DELIVERY: ${MAIL_DELIVERY:-redirect}
+  MAIL_REDIRECT_TO: ${MAIL_REDIRECT_TO-}
+  MOODLE_WS_URL: ${MOODLE_WS_URL:-http://moodle-stub:8091}
+  # Địa chỉ Moodle trình duyệt mở được (liên kết "Xem như sinh viên" ở tab Đã gửi)
+  MOODLE_WS_PUBLIC_URL: ${MOODLE_WS_PUBLIC_URL:-http://localhost:${MOODLE_STUB_PORT:-8091}}
+  MOODLE_WS_TOKEN: ${MOODLE_WS_TOKEN:-lms-analytics-demo-token}
+  MOODLE_WS_ENV: ${MOODLE_WS_ENV:-stub}
+  MESSAGING_ALLOW_LIVE: ${MESSAGING_ALLOW_LIVE:-false}
 
 x-python-image: &python-image
   build:
@@ -64,7 +83,13 @@ services:
     # (đo được: vài request đơn lẻ chờ tới 30–69 giây; đặt 65s thì chậm nhất còn 0,55 giây)
     command: ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000",
               "--workers", "2", "--timeout-keep-alive", "65", "--proxy-headers", "--forwarded-allow-ips", "*"]
-    environment: *app-env
+    environment:
+      <<: *app-env
+      BACKEND_BACKUP_DIR: /app/backups
+    # Bản sao lưu CSDL phân tích (Hệ thống › Sao lưu & phục hồi) và email .eml (chế độ kiểm thử) giữ lại khi tạo lại container
+    volumes:
+      - backups:/app/backups
+      - mail_outbox:/app/var/mail_outbox
     depends_on:
       init:
         condition: service_completed_successfully
@@ -79,6 +104,26 @@ services:
     <<: *python-image
     command: ["python", "-m", "etl.scheduler"]
     environment: *app-env
+    volumes:
+      - mail_outbox:/app/var/mail_outbox
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Máy chủ Moodle 3.9 mô phỏng (core_webservice_get_site_info, core_message_send_instant_messages) ghi vào moodle_src.
+  # Bỏ dịch vụ này khi đã trỏ MOODLE_WS_URL tới Moodle thật của trường.
+  moodle-stub:
+    <<: *python-image
+    command: ["python", "-m", "tools.moodle_ws_stub"]
+    environment:
+      <<: *app-env
+      MOODLE_STUB_HOST: 0.0.0.0
+      MOODLE_STUB_PORT: "8091"
+      MOODLE_STUB_PUBLIC_URL: http://localhost:${MOODLE_STUB_PORT:-8091}
+    # Mở hộp tin sinh viên mô phỏng trên máy: http://localhost:8091/stub/inbox?userid=<mdl_user.id>
+    ports:
+      - "${MOODLE_STUB_PORT:-8091}:8091"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -98,3 +143,5 @@ services:
 
 volumes:
   pgdata:
+  backups:
+  mail_outbox:

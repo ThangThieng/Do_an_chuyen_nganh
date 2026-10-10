@@ -6,7 +6,7 @@ nên môn đã kết thúc trước hôm nay vẫn có mặt với số liệu c
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import Connection
 
@@ -68,6 +68,12 @@ def overview_kpis(conn: Connection, academic_year: str, semester: int, faculty_i
         SELECT ROUND(AVG(online_users), 1) FROM analytics.etl_online_snapshot
         WHERE slot_start >= :day_start AND slot_start <= :now""", {"day_start": day_start, "now": now})
 
+    prev = fetch_one(conn, f"""
+        WITH {latest_courses_cte(faculty_id=faculty_id)}
+        SELECT COALESCE(SUM(total_enrolled_students), 0) AS enrolled, COALESCE(SUM(red_count), 0) AS red
+        FROM latest""", {**params, "today": today - timedelta(days=7)})
+    unique = unique_students(conn, academic_year, semester, today, faculty_id)
+
     enrolled = int(courses["total_enrolled"])
     return dict(
         academic_year=academic_year, semester=semester, faculty_id=faculty_id, stat_date=courses["stat_date"],
@@ -82,6 +88,9 @@ def overview_kpis(conn: Connection, academic_year: str, semester: int, faculty_i
         avg_online_users_today=float(avg_online) if avg_online is not None else 0.0,
         current_online=int(online["online_users"]) if online else 0,
         current_online_at=online["slot_start"] if online else None,
+        unique_students=unique,
+        red_rate_prev_week=(round(100 * int(prev["red"]) / int(prev["enrolled"]), 2)
+                            if prev and int(prev["enrolled"]) else None),
     )
 
 
@@ -107,6 +116,7 @@ def enrollment_by_faculty(conn: Connection, academic_year: str, semester: int, t
 
 COURSE_SORTS = {
     "active_rate": f"COALESCE({ACTIVE_RATE}, 0)",
+    "red_rate": "COALESCE(red_count::numeric / NULLIF(total_enrolled_students, 0), 0)",
     "enrolled": "total_enrolled_students",
     "active": "total_active_students",
     "red_count": "red_count",
@@ -127,8 +137,13 @@ def faculty_courses(conn: Connection, faculty_id: int, academic_year: str, semes
                total_enrolled_students - total_active_students AS inactive,
                COALESCE({ACTIVE_RATE}, 0) AS active_rate,
                red_count, yellow_count, green_count,
-               avg_completion_rate, assignment_submission_rate, attendance_rate
+               ROUND(100.0 * red_count / NULLIF(total_enrolled_students, 0), 2)    AS red_rate,
+               ROUND(100.0 * yellow_count / NULLIF(total_enrolled_students, 0), 2) AS yellow_rate,
+               ROUND(100.0 * green_count / NULLIF(total_enrolled_students, 0), 2)  AS green_rate,
+               avg_completion_rate, assignment_submission_rate, attendance_rate,
+               rule_scope, rule_label
         FROM latest
+        LEFT JOIN {RULE_OF_ROW} USING (rule_set_id)
         ORDER BY {order_by(sort, order, COURSE_SORTS, "course_shortname, course_id")}""",
         {"ay": academic_year, "sem": semester, "today": today, "faculty_id": faculty_id})
 
@@ -178,9 +193,139 @@ def course_students(conn: Connection, course_id: int, snapshot_date: date, *, st
 def active_counts_by_course(conn: Connection, today: date) -> dict[int, int]:
     """Số SV có tương tác theo snapshot rủi ro mới nhất của mỗi môn (dùng để đối chiếu trong kiểm thử)."""
     rows = fetch_all(conn, f"""
-        WITH d AS (SELECT course_id, MAX(snapshot_date) AS snapshot_date FROM analytics.fact_student_risk_summary
-                   WHERE snapshot_date <= :today GROUP BY course_id)
+        WITH {latest_risk_snapshots_cte(term=False)}
         SELECT f.course_id, COUNT(*) FILTER (WHERE {IS_ACTIVE_IN_TERM}) AS active
-        FROM analytics.fact_student_risk_summary f JOIN d USING (course_id, snapshot_date)
+        FROM analytics.fact_student_risk_summary f JOIN snap ON snap.course_id = f.course_id AND f.snapshot_date = snap.d
         GROUP BY f.course_id""", {"today": today})
     return {int(r["course_id"]): int(r["active"]) for r in rows}
+
+
+def latest_risk_snapshots_cte(term: bool = True, faculty: bool = False) -> str:
+    """
+    CTE "snap(course_id, d)": snapshot rủi ro mới nhất (<= :today) của TỪNG môn.
+    Danh sách môn lấy từ fact_course_progress_daily (nhỏ: môn × ngày), ngày mới nhất tra theo chỉ mục
+    ix_risk_course_date_level (course_id, snapshot_date DESC) – không quét toàn bảng fact_student_risk_summary
+    (dữ liệu 5 khoa: 770 nghìn dòng; GROUP BY trên cả bảng mất 0,7–2 giây).
+    """
+    conditions = ["stat_date <= :today"]
+    if term:
+        conditions += ["academic_year = :ay", "semester = :sem"]
+    if faculty:
+        conditions.append("faculty_id = :faculty_id")
+    return f"""snap AS (
+            SELECT c.course_id, s.d
+            FROM (SELECT DISTINCT course_id FROM analytics.fact_course_progress_daily WHERE {where(conditions)}) c
+            CROSS JOIN LATERAL (SELECT MAX(r.snapshot_date) AS d FROM analytics.fact_student_risk_summary r
+                                WHERE r.course_id = c.course_id AND r.snapshot_date <= :today) s
+            WHERE s.d IS NOT NULL)"""
+
+
+# Dòng snapshot của từng môn trong "snap", tra theo chỉ mục (course_id, snapshot_date) – mỗi môn vài trăm dòng.
+# (JOIN thường khiến planner quét cả chỉ mục khóa chính 770 nghìn mục để nối băm.)
+SNAP_ROWS = """CROSS JOIN LATERAL (SELECT x.user_id, x.faculty_id FROM analytics.fact_student_risk_summary x
+                                  WHERE x.course_id = snap.course_id AND x.snapshot_date = snap.d) r"""
+
+
+@cached
+def unique_students(conn: Connection, academic_year: str, semester: int, today: date,
+                    faculty_id: int | None = None) -> int:
+    """Số sinh viên khác nhau trên snapshot rủi ro mới nhất của từng môn (một SV học nhiều môn tính một lần)."""
+    return int(fetch_value(conn, f"""
+        WITH {latest_risk_snapshots_cte(faculty=faculty_id is not None)}
+        SELECT COUNT(DISTINCT r.user_id) FROM snap {SNAP_ROWS}""",
+        {"ay": academic_year, "sem": semester, "today": today, "faculty_id": faculty_id}) or 0)
+
+
+# Chỉ lấy 2 cột của bộ luật (risk_rule_set cũng có course_id… – JOIN nguyên bảng làm tên cột bị mơ hồ)
+RULE_OF_ROW = "(SELECT rule_set_id, scope AS rule_scope, label AS rule_label FROM analytics.risk_rule_set) rs"
+
+FACULTY_AGG = f"""
+        SELECT faculty_id, faculty_name,
+               COUNT(*)                                     AS course_count,
+               SUM(total_enrolled_students)                 AS enrolled,
+               SUM(total_active_students)                   AS active,
+               SUM(red_count)                               AS red,
+               SUM(yellow_count)                            AS yellow,
+               SUM(green_count)                             AS green,
+               ROUND(SUM(assignment_submission_rate * total_enrolled_students)
+                     / NULLIF(SUM(total_enrolled_students) FILTER (WHERE assignment_submission_rate IS NOT NULL), 0), 2)
+                                                            AS avg_submission_rate,
+               ROUND(SUM(attendance_rate * total_enrolled_students)
+                     / NULLIF(SUM(total_enrolled_students) FILTER (WHERE attendance_rate IS NOT NULL), 0), 2)
+                                                            AS avg_attendance_rate,
+               COUNT(*) FILTER (WHERE rule_scope = 'COURSE') AS custom_rule_courses
+        FROM latest
+        LEFT JOIN {RULE_OF_ROW} USING (rule_set_id)
+        GROUP BY faculty_id, faculty_name"""
+
+
+def _pct(part, whole) -> float | None:
+    return round(100 * int(part) / int(whole), 2) if whole and int(whole) else None
+
+
+@cached
+def compare_faculties(conn: Connection, academic_year: str, semester: int, today: date) -> dict:
+    """Khối "So sánh giữa các Khoa" (góp ý 1): quy mô, tỷ lệ tương tác, phân bố rủi ro, thay đổi so với tuần trước."""
+    params = {"ay": academic_year, "sem": semester, "today": today}
+    rows = fetch_all(conn, f"WITH {latest_courses_cte()} {FACULTY_AGG} ORDER BY enrolled DESC, faculty_name", params)
+    prev = {r["faculty_id"]: r for r in fetch_all(
+        conn, f"WITH {latest_courses_cte()} {FACULTY_AGG}", {**params, "today": today - timedelta(days=7)})}
+    uniques = {int(r["faculty_id"]): int(r["n"]) for r in fetch_all(conn, f"""
+        WITH {latest_risk_snapshots_cte()}
+        SELECT r.faculty_id, COUNT(DISTINCT r.user_id) AS n FROM snap {SNAP_ROWS}
+        GROUP BY r.faculty_id""", params)}
+    items = []
+    for r in rows:
+        enrolled = int(r["enrolled"])
+        red_rate = _pct(r["red"], enrolled)
+        p = prev.get(r["faculty_id"])
+        prev_rate = _pct(p["red"], p["enrolled"]) if p else None
+        items.append(dict(
+            faculty_id=r["faculty_id"], faculty_name=r["faculty_name"], course_count=int(r["course_count"]),
+            enrolled=enrolled, unique_students=uniques.get(int(r["faculty_id"]), 0),
+            active=int(r["active"]), inactive=enrolled - int(r["active"]), active_rate=_pct(r["active"], enrolled),
+            avg_submission_rate=r["avg_submission_rate"], avg_attendance_rate=r["avg_attendance_rate"],
+            red=int(r["red"]), yellow=int(r["yellow"]), green=int(r["green"]),
+            red_rate=red_rate, yellow_rate=_pct(r["yellow"], enrolled), green_rate=_pct(r["green"], enrolled),
+            red_rate_delta_week=(round(red_rate - prev_rate, 2)
+                                 if red_rate is not None and prev_rate is not None else None),
+            custom_rule_courses=int(r["custom_rule_courses"]),
+        ))
+    total = sum(i["enrolled"] for i in items)
+    school = dict(
+        enrolled=total, unique_students=unique_students(conn, academic_year, semester, today),
+        active=sum(i["active"] for i in items), course_count=sum(i["course_count"] for i in items),
+        red=sum(i["red"] for i in items), yellow=sum(i["yellow"] for i in items), green=sum(i["green"] for i in items),
+    )
+    school.update(active_rate=_pct(school["active"], total), red_rate=_pct(school["red"], total),
+                  yellow_rate=_pct(school["yellow"], total), green_rate=_pct(school["green"], total))
+    # Nộp bài / chuyên cần toàn trường: trung bình theo lượt ghi danh trên mọi môn có dữ liệu (cùng cách tính với khoa)
+    school.update(fetch_one(conn, f"""
+        WITH {latest_courses_cte()}
+        SELECT ROUND(SUM(assignment_submission_rate * total_enrolled_students)
+                     / NULLIF(SUM(total_enrolled_students) FILTER (WHERE assignment_submission_rate IS NOT NULL), 0), 2)
+                   AS avg_submission_rate,
+               ROUND(SUM(attendance_rate * total_enrolled_students)
+                     / NULLIF(SUM(total_enrolled_students) FILTER (WHERE attendance_rate IS NOT NULL), 0), 2)
+                   AS avg_attendance_rate
+        FROM latest""", params) or dict(avg_submission_rate=None, avg_attendance_rate=None))
+    return dict(school=school, items=items)
+
+
+@cached
+def faculty_summary(conn: Connection, faculty_id: int, academic_year: str, semester: int, today: date) -> dict | None:
+    """Số liệu tổng hợp của một khoa (KPI trang Khoa, đường trung bình khoa trên biểu đồ so sánh các môn)."""
+    data = compare_faculties(conn, academic_year, semester, today)
+    item = next((i for i in data["items"] if int(i["faculty_id"]) == faculty_id), None)
+    if item is None:
+        return None
+    return dict(faculty_id=faculty_id, faculty_name=item["faculty_name"], course_count=item["course_count"],
+                enrolled=item["enrolled"], unique_students=item["unique_students"], active=item["active"],
+                avg_active_rate=item["active_rate"], avg_submission_rate=item["avg_submission_rate"],
+                avg_attendance_rate=item["avg_attendance_rate"], red=item["red"], yellow=item["yellow"],
+                green=item["green"], red_rate=item["red_rate"], red_rate_delta_week=item["red_rate_delta_week"],
+                custom_rule_courses=item["custom_rule_courses"],
+                school_enrolled=data["school"]["enrolled"],
+                school_active_rate=data["school"]["active_rate"], school_red_rate=data["school"]["red_rate"],
+                school_submission_rate=data["school"]["avg_submission_rate"],
+                school_attendance_rate=data["school"]["avg_attendance_rate"])

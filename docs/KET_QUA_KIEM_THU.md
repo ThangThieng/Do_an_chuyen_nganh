@@ -1,6 +1,7 @@
 # KẾT QUẢ KIỂM THỬ VÀ ĐO HIỆU NĂNG
 
-> Đối chiếu với Phần 6 của [kế hoạch](../SPEC/KE_HOACH_TRIEN_KHAI.md) · Đo ngày 17/09/2026
+> Đối chiếu với Phần 6 của [kế hoạch](../SPEC/KE_HOACH_TRIEN_KHAI.md) · Đo ngày 17/09/2026 (v1.0), 01/10/2026 (v1.1),
+> **10/10/2026 (v1.2 – dữ liệu 5 khoa, xem [mục 5c](#5c-phiên-bản-12-10102026))**
 > Máy đo: Intel Core i5-12450H (12 luồng), 16 GB RAM, Windows 11, PostgreSQL 18 cài trực tiếp trên máy.
 > Dữ liệu thô của từng phép đo: thư mục [perf/results/](../perf/results/)
 
@@ -10,10 +11,10 @@
 
 | Nhóm | Số lượng | Kết quả |
 |---|---|---|
-| pytest – CSDL, ETL, mock data, tích hợp, API, bảo mật | 248 | Tất cả đạt |
-| vitest – hàm định dạng và gộp dữ liệu biểu đồ | 8 | Tất cả đạt |
-| Playwright – luồng Admin/Giảng viên, phân quyền, responsive, WCAG | 27 | Tất cả đạt (chạy trên bản Docker) |
-| Kiểm tra nhanh giao diện bằng trình duyệt (`npm run smoke`) | 11 bước | Không lỗi JavaScript, console hay API |
+| pytest – CSDL, ETL, mock data, tích hợp, API, gửi tin, bảo mật, sao lưu | 248 (17/09) → 284 (01/10, v1.1) → **@@PYTEST@@ (10/10, v1.2)** | Tất cả đạt |
+| vitest – hàm định dạng, gộp dữ liệu biểu đồ, nhãn trục | 8 → **10** | Tất cả đạt |
+| Playwright – luồng Admin/Giảng viên, luật theo môn, gửi tin, phân quyền, responsive, WCAG | 27 → 32 (v1.1) → **57 (v1.2, Vite dev server)** | Tất cả đạt |
+| Kiểm tra nhanh giao diện bằng trình duyệt (`npm run smoke`) | 11 → **15 bước** | Không lỗi JavaScript, console hay API |
 
 | Mục tiêu hiệu năng (kế hoạch 6.2) | Kết quả đo | Đạt |
 |---|---|---|
@@ -22,6 +23,9 @@
 | Tải trang: biểu đồ đầu < 1 s, LCP < 2,5 s, TTI < 3 s (cache lạnh) | 335–409 ms · 360–428 ms · 389–461 ms | ✔ |
 | ETL: traffic < 30 s, risk < 5 phút, nightly < 20 phút | 0,10 s · 60 s · 60 s | ✔ |
 | Xuất file: Excel 10.000 dòng và PDF 500 dòng < 5 s | Excel 23.830 dòng 4,48 s · PDF 408 dòng 0,53 s | ✔ |
+| **v1.2, dữ liệu 5 khoa:** 94 câu SQL ≤ 100 ms, không Seq Scan bảng lớn | chậm nhất **8,9 ms** | ✔ |
+| **v1.2:** API 50 người dùng đồng thời (gồm API mới) | p95 **28 ms**, p99 **50 ms**, **0 lỗi** / 8.832 request | ✔ |
+| **v1.2:** gửi 200 tin ở chế độ file/Moodle mô phỏng < 30 s | Đạt (`test_bulk_200_messages…`) | ✔ |
 
 ---
 
@@ -236,11 +240,89 @@ Chạy lại `up` lần hai: dịch vụ `init` tự phát hiện CSDL đã có 
 
 ---
 
+## 5b. PHIÊN BẢN 1.1 (01/10/2026)
+
+| Kiểm thử mới | Kết quả |
+|---|---|
+| `tests/backend/test_system_api.py` – chính sách mật khẩu, thu hồi token khi đổi mật khẩu, khóa/mở khóa, đặt lại mật khẩu, nhật ký ETL, danh mục, ràng buộc tên tệp sao lưu | Đạt |
+| `tests/backend/test_backup_service.py` – sao lưu → làm bẩn dữ liệu → phục hồi → so MD5 cả 8 bảng; từ chối khác phiên bản; rollback khi số dòng lệch; khóa chống chạy chồng | Đạt |
+| `frontend/e2e/tests/system.spec.js` – menu Hệ thống, tạo/xóa bản sao lưu, điều kiện nút Phục hồi, danh mục, kiểm tra ô đổi mật khẩu, phân quyền | Đạt (5 test) |
+| Sao lưu / phục hồi dữ liệu demo (khoảng 165.700 dòng) | Windows: 2,2 s / 38,4 s · Docker: 3,0 s / 14,7 s |
+| Docker 1.1 – nâng cấp tại chỗ (migration V008 trên dữ liệu cũ) và cài mới từ volume trống (201 s, backfill 146 s) | 32/32 E2E đạt ở cả hai |
+
+Hiệu năng ở mục 3 đo trên phiên bản 1.0, chưa đo lại cho 1.1.
+
+Lỗi phát hiện khi chạy trên Docker: phục hồi qua API chờ khóa 30 giây rồi lỗi 500, do giao dịch đọc `app_user` của bước xác thực còn mở. Đã sửa (`get_current_user` kết thúc giao dịch ngay sau khi đọc) và thêm `test_restore_via_api`.
+
+## 5c. PHIÊN BẢN 1.2 (10/10/2026)
+
+Theo [kế hoạch v1.2](gop_y_giao_dien/TongHop_GopY_GiaoDien_va_KeHoach_v1.2.docx) Mục 7.7. Máy đo như trên.
+
+### 5c.1 Bộ dữ liệu 5 khoa
+
+| Hạng mục | Số đo |
+|---|---|
+| Cấu trúc | 5 khoa · 13 bộ môn · 58 môn (gồm 4 lớp Tiếng Anh 1 dùng chung) · 3.000 SV · 28 GV · 13.105 lượt ghi danh (12.583 còn hiệu lực tại AS_OF) |
+| Hành vi | 6.385.738 dòng nhật ký · 48.144 bài nộp · 180.786 lượt điểm danh · 145.171 dòng hoàn thành hoạt động |
+| Thời gian sinh dữ liệu (`mock`) | **415 s** (6,9 phút) |
+| ETL backfill 07/09 → 06/11 (61 ngày) | **1.886,5 s** (31,4 phút) · trích xuất 45,4 triệu dòng · nạp 230.614 dòng |
+| Dung lượng | `moodle_src` 2,6 GB · `lms_analytics` 1,25 GB (770.314 dòng cảnh báo, 3.538 dòng tiến độ) |
+| Kiểm thử toàn vẹn mock (`tests/mockdata`) | Đạt: 5 khoa, MSSV đúng dải, mỗi môn TH có 2 hoạt động điểm danh, bảng nhắn tin khớp lược đồ Moodle 3.9, phân bố hồ sơ theo khoa |
+
+### 5c.2 Tính đúng đắn
+
+| Kiểm thử | Kết quả |
+|---|---|
+| Đối soát độc lập với Moodle (mỗi khoa 1 môn ngẫu nhiên): ghi danh, tương tác, buổi vắng, bài thiếu từng SV, request từng giờ | **Sai lệch 0** |
+| Đối chiếu ground truth – 12.583 cặp SV–môn | Recall(ĐỎ) **99,3%** · Precision(ĐỎ) **86,7%** (mục tiêu ≥ 80%: luật mặc định giữ nguyên) |
+| Chạy lại 3 job ETL | Không dòng nào thay đổi (checksum băm từng dòng) |
+| Tổng các khoa = KPI toàn trường; điểm cuối xu hướng = biểu đồ tròn (trường, khoa, môn); Σ% ba mức = 100 | Bằng nhau tuyệt đối |
+| Mọi dòng cảnh báo hôm nay: chấm lại từ bộ luật đã lưu (`rule_set_id`) | Điểm và mức trùng **100%** |
+| Lưu luật riêng của môn rồi chạy lại ETL từ Moodle cùng ngày | ETL không phải sửa dòng nào (`rows_loaded = 0`) |
+| Lưu 2 lần → 2 phiên bản; snapshot ngày trước giữ `rule_set_id` cũ; xu hướng có mốc đổi luật | Đạt |
+| Đổi ngưỡng trong `etl/config.py` → tự phát hành phiên bản luật GLOBAL mới | Đạt |
+
+### 5c.3 Gửi tin – chứng minh mức 1–3 (kế hoạch Mục 5.11)
+
+| Mức | Kiểm thử / bằng chứng | Kết quả |
+|---|---|---|
+| 1 – email | `tests/messaging/test_delivery.py`: SMTP cục bộ (aiosmtpd) nhận thư thật – người nhận, tiêu đề, Reply-To, tiếng Việt, Message-ID; chế độ chuyển hướng; 550 → lỗi vĩnh viễn; không kết nối được → lỗi tạm thời | Đạt |
+| 2 – Moodle | Hợp đồng REST Moodle 3.9 (`messages[0][touserid]`, msgid, -1, invalidtoken, timeout/5xx); kiểm thử tích hợp gửi qua HTTP tới máy chủ mô phỏng rồi đọc lại `mdl_messages` + thành viên hội thoại | Đạt |
+| 3 – giao diện | E2E: GV chọn 3 SV → soạn → gửi 6 tin → mã xác nhận → mở hộp tin trên Moodle mô phỏng thấy đúng tin; ảnh `mh15_ket_qua_gui`, `mh15_da_gui`, `mh17_hop_tin_sinh_vien` | Đạt |
+| Hàng đợi | Chống trùng (cùng khóa → 1 tin); lỗi tạm thời thử lại sau **1 – 5 – 15 phút** rồi SENT; hết lượt → FAILED; lỗi vĩnh viễn FAILED ngay; nhật ký can thiệp liên kết với tin | Đạt |
+| Chốt chặn | Dữ liệu demo (AS_OF đặt) + SMTP + MAIL_DELIVERY=live + cờ bật → API trả 409, không tin nào tới hộp thư thật | Đạt |
+| Nhắc tự động | 3 loại điều kiện (so với tính độc lập bằng SQL), chạy lại không tạo trùng (thời gian chờ), chế độ chờ duyệt, giờ yên lặng 22–6 hẹn 07:00, tham số ngoài giới hạn → 422 | Đạt |
+| Mức 4 – gửi thật | Cần tài khoản SMTP/Moodle của nhóm/trường | **Chưa làm** (mục 6) |
+
+### 5c.4 Giao diện, phân quyền, khả năng tiếp cận
+
+- **57 E2E đạt** (Vite dev server): drill-down Toàn trường → Khoa → Môn → Sinh viên kèm F5/Back (`?student=`), ngăn "Nguồn & cách tính", mẫu luật Đồ án → xem trước → lưu → trang Cảnh báo đổi số và ghi "luật riêng" → khôi phục mặc định, gửi tin + hộp tin mô phỏng, nhắc tự động chạy thử, kiểm tra kết nối Moodle ở trang Kênh gửi tin, phân quyền (trợ giảng không lưu được luật, GV môn khác/Admin gọi API can thiệp → 403), responsive **7 trang × 4 độ rộng**, axe WCAG 2.1 A/AA trên 14 màn hình (không còn vi phạm serious/critical).
+- Lỗi phát hiện và đã sửa nhờ E2E/axe: tiêu đề thẻ bị ép về 0 px ở 390 px (bộ chọn CSS-in-JS của Ant Design đè quy tắc); trang Thiết lập cảnh báo cuộn ngang 107 px; thông báo che menu (rê chuột làm thông báo không tự tắt); tương phản thẻ màu, liên kết, nút khi rê chuột, chữ trạng thái rỗng, nút "Xóa"; ô nhập/ô chọn thiếu nhãn; Divider chứa nút; vùng cuộn không nhận tiêu điểm; hàng đo ẩn của bảng chứa phần tử nhận tiêu điểm.
+- Lỗi chức năng tìm ra trong quá trình kiểm thử v1.2 và đã sửa: trang Khoa lỗi SQL (cột `course_id` mơ hồ); sao lưu thiếu 6 bảng mới (V012 + danh sách bảng); máy chủ Moodle mô phỏng lỗi 500 với POST (thiếu `python-multipart` trong requirements); trình soạn tin gọi xem trước với danh sách rỗng sau khi gửi (422); "−0,0 điểm %" tô màu "tốt lên"; tên khoa đè nhau trên trục biểu đồ; cửa sổ chi tiết của quản trị thiếu biểu đồ so sánh với lớp; xu hướng cấp môn chưa tính tuần từ ngày bắt đầu môn (V013).
+
+### 5c.5 Hiệu năng
+
+| Hạng mục | Kết quả |
+|---|---|
+| EXPLAIN 94 câu SQL (mọi API đọc, gồm v1.2) – `perf/results/explain_x1.json` | Chậm nhất **8,9 ms**; không Seq Scan trên bảng > 100.000 dòng |
+| Locust 50 người dùng, 5 phút – `perf/results/locust_v12_5khoa.html` | 8.832 request · **0 lỗi** · trung vị 12 ms · p95 **28 ms** · p99 **50 ms** · chậm nhất 1,4 s (đăng nhập bcrypt lúc 50 người dùng cùng vào) |
+| Sao lưu / phục hồi qua API (dữ liệu ~1,25 GB) | tạo bản sao lưu **~45 s** (ZIP 140 MB) · phục hồi **~4,5 phút**; cấu trúc sau phục hồi giống hệt (khóa ngoại, chỉ mục) |
+
+Hai lỗi hiệu năng phát hiện và sửa:
+1. **"Sinh viên duy nhất" quét toàn bảng cảnh báo** (`GROUP BY` trên 770 nghìn dòng): 700 ms, tới 2–3 s khi đồng thời. Viết lại: danh sách môn từ bảng tiến độ + `LATERAL` tra snapshot mới nhất theo chỉ mục, thêm chỉ mục phủ `ix_risk_course_snapshot_users` (V014, 23 MB) → **7 ms**. `/meta/freshness` dùng cùng cách (89 ms → < 1 ms).
+2. **Phục hồi sao lưu chậm** (cả nhóm kiểm thử sao lưu 32 phút): cập nhật 26 chỉ mục và 17 khóa ngoại cho từng dòng. Phục hồi nay tạm bỏ chỉ mục phụ và khóa ngoại trong cùng giao dịch, nạp dữ liệu, rồi dựng lại từ đúng định nghĩa trong catalog (cách `pg_restore` làm; khóa ngoại được kiểm tra trên toàn bộ dữ liệu khi thêm lại); xuất gom khối 1 MB trước khi nén → nhóm kiểm thử còn 23,6 phút.
+
+Lưu ý khi đọc số Locust: một lần đo đầu cho 2 request "265 giây" – đó là tiến trình Locust bị chặn khi dừng (đo lại với `--stop-timeout 10` không lặp lại; API không chậm).
+
+Chưa đo lại bộ x10 cho v1.2: dựng x10 từ dữ liệu 5 khoa cần thêm khoảng 12–15 GB trên ổ C (còn 21 GB). Số dòng cảnh báo của bộ 5 khoa (770 nghìn) đã gấp 5 bộ x1 cũ.
+
 ## 6. NHỮNG GÌ CHƯA LÀM
 
 | Hạng mục | Lý do |
 |---|---|
 | UAT với 2–3 giảng viên thật | Cần người dùng thật tham gia |
+| Chứng minh gửi tin mức 4 (SMTP/Moodle thật) | Cần tài khoản thư và token Moodle do nhóm/trường cấp (kế hoạch Mục 5.10, 10) |
+| Đo lại bộ x10 cho v1.2 và chạy E2E trên bản Docker v1.2 | Thiếu dung lượng đĩa cho x10; Docker cần dựng lại ~45 phút với dữ liệu 5 khoa |
 | Lighthouse chính thức | Đang đo bằng Playwright (LCP, TBT, TTI xấp xỉ) vì trang cần đăng nhập |
 | Giảm dung lượng gói JavaScript | Gói chính 924 KB (gzip 299 KB), chủ yếu là Ant Design; ảnh hưởng rõ khi CPU chậm |
 | Đo trên máy chủ riêng | Hiện Locust và API chạy cùng một máy nên số đo là cận trên |

@@ -1,0 +1,36 @@
+@startuml seq_etl_rui_ro
+!include _style.iuml
+autonumber
+participant "APScheduler" as SCH
+participant "runner\n(run_job)" as RUN
+participant "extract\n(extract_course_dataset)" as EX
+participant "transform\n(student_metrics,\nscore_student)" as TR
+participant "load\n(upsert)" as LD
+database "moodle_src" as MD
+database "lms_analytics" as AN
+
+SCH -> RUN : 07:15–21:15, 2 giờ/lần\nrun_with_retries(student_risk)
+RUN -> AN : pg_try_advisory_lock(student_risk)
+alt khóa đang bị giữ
+  RUN --> SCH : bỏ qua lượt này
+else lấy được khóa
+  RUN -> AN : INSERT etl_run_log (RUNNING) RETURNING run_id
+  RUN -> EX : compute(ctx)
+  EX -> MD : BEGIN REPEATABLE READ, READ ONLY
+  EX -> MD : SELECT khóa học, ghi danh, tương tác,\nđiểm danh, bài tập, hoàn thành (tại AS_OF)
+  MD --> EX : các DataFrame (CourseDataset)
+  EX -> TR : student_metrics(ds)
+  TR -> TR : tính C1, C2, C3 theo ngưỡng\nxếp RED / YELLOW / GREEN, risk_score
+  TR --> LD : build_risk_rows(...)
+  LD -> AN : COPY vào bảng tạm
+  LD -> AN : INSERT ... ON CONFLICT DO UPDATE\nWHERE giá trị IS DISTINCT FROM
+  LD -> AN : DELETE snapshot hôm nay của SV\nkhông còn ghi danh
+  alt có lỗi
+    RUN -> AN : UPDATE etl_run_log SET status='FAILED', error_message
+    RUN --> SCH : ném lỗi -> thử lại sau 1, 5, 15 phút
+  else thành công
+    RUN -> AN : UPDATE etl_run_log SET status='SUCCESS',\nrows_extracted, rows_loaded
+  end
+  RUN -> AN : pg_advisory_unlock
+end
+@enduml

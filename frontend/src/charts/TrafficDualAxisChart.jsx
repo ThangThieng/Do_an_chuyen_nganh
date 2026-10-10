@@ -49,7 +49,7 @@ export default function TrafficDualAxisChart({ items, labelFormat = "HH:mm" }) {
                   `Online cao nhất: ${fmtInt(item.peak_online_users)}`,
                   `Người dùng hoạt động: ${fmtInt(item.unique_users)}`,
                   `Đăng nhập: ${fmtInt(item.login_count)} (lỗi ${fmtInt(item.failed_login_count)})`,
-                  ...(item.is_peak_hour ? ["▲ Giờ cao điểm"] : []),
+                  ...(item.is_peak_hour ? ["Giờ cao điểm"] : []),
                 ];
               },
             },
@@ -91,5 +91,5 @@ export const trafficTableColumns = [
   { title: "Online TB", dataIndex: "avg_online_users", align: "right", render: (v) => fmtDecimal(v, 1) },
   { title: "Online cao nhất", dataIndex: "peak_online_users", align: "right", render: fmtInt },
   { title: "Đăng nhập lỗi", dataIndex: "failed_login_count", align: "right", render: fmtInt },
-  { title: "Giờ cao điểm", dataIndex: "is_peak_hour", render: (v) => (v ? "▲ Có" : "") },
+  { title: "Giờ cao điểm", dataIndex: "is_peak_hour", render: (v) => (v ? "Có" : "") },
 ];

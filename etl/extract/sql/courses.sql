@@ -9,12 +9,15 @@ SELECT c.id                AS course_id,
        cc.name             AS category_name,
        fac.id              AS faculty_id,
        fac.name            AS faculty_name,
-       COALESCE(t.teacher_ids, ARRAY[]::bigint[]) AS teacher_ids
+       COALESCE(t.teacher_ids, ARRAY[]::bigint[]) AS teacher_ids,
+       COALESCE(t.editing_teacher_ids, ARRAY[]::bigint[]) AS editing_teacher_ids
 FROM mdl_course c
 JOIN mdl_course_categories cc  ON cc.id = c.category
 JOIN mdl_course_categories fac ON fac.id = split_part(cc.path, '/', 2)::bigint
 LEFT JOIN LATERAL (
-    SELECT array_agg(DISTINCT ra.userid ORDER BY ra.userid) AS teacher_ids
+    SELECT array_agg(DISTINCT ra.userid ORDER BY ra.userid) AS teacher_ids,
+           array_agg(DISTINCT ra.userid ORDER BY ra.userid) FILTER (WHERE r.shortname = 'editingteacher')
+               AS editing_teacher_ids
     FROM mdl_context ctx
     JOIN mdl_role_assignments ra ON ra.contextid = ctx.id
     JOIN mdl_role r              ON r.id = ra.roleid AND r.shortname IN ('editingteacher', 'teacher')

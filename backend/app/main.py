@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.core.config import get_settings
-from backend.app.routers import admin, auth, common, reports, teacher
+from backend.app.routers import admin, auth, channels, common, interventions, meta, reports, rules, system, teacher
 
 API_PREFIX = "/api/v1"
 
@@ -27,10 +27,10 @@ API cho Dashboard trực quan hóa dữ liệu LMS Moodle. Dữ liệu đọc t�
 
 def create_app() -> FastAPI:
     settings = get_settings()          # kiểm tra cấu hình ngay khi khởi động
-    app = FastAPI(title="LMS Analytics API", version="1.0.0", description=DESCRIPTION,
+    app = FastAPI(title="LMS Analytics API", version="1.2.0", description=DESCRIPTION,
                   docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json")
     app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins), allow_credentials=False,
-                       allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type"],
+                       allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["Authorization", "Content-Type"],
                        expose_headers=["Content-Disposition", "X-Process-Time-Ms", "X-Data-Updated-At"])
 
     @app.middleware("http")
@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
             response.headers.setdefault("Cache-Control", "no-store")
         return response
 
-    for module in (auth, common, admin, reports, teacher):
+    for module in (auth, common, meta, admin, reports, system, channels, teacher, rules, interventions):
         app.include_router(module.router, prefix=API_PREFIX)
     return app
 

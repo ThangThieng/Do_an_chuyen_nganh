@@ -9,7 +9,7 @@ API chỉ đọc CSDL phân tích `lms_analytics` (3 bảng fact do ETL nạp), 
 ```
 backend/app/
 ├── main.py              create_app(): CORS, header X-Process-Time-Ms, gắn router vào /api/v1
-├── cli.py               quản lý tài khoản: sync-users, set-password, list-users
+├── cli.py               quản lý tài khoản (sync-users, set-password, list-users) và sao lưu (backup, list-backups, restore)
 ├── core/
 │   ├── config.py        biến BACKEND_* trong .env; "hôm nay" tính theo LMS_AS_OF
 │   ├── db.py            engine SQLAlchemy (pool 10, statement_timeout 15s), get_conn
@@ -31,6 +31,8 @@ python -m pip install -r requirements.txt
 $env:BACKEND_SEED_PASSWORD = "<mật khẩu ban đầu>"
 python -m backend.app.cli sync-users
 python -m backend.app.cli set-password --username gv.tranminhhung      # đổi mật khẩu (hỏi từ bàn phím)
+python -m backend.app.cli backup                                       # sao lưu dữ liệu phân tích vào backups/
+python -m backend.app.cli restore --file lms_analytics_YYYYMMDD_HHMMSS.zip
 
 python -m uvicorn backend.app.main:app --reload --port 8000
 # Swagger UI: http://localhost:8000/api/docs

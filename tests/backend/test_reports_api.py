@@ -14,8 +14,8 @@ EXPORT = f"{API}/admin/reports/export"
 
 
 def test_preview_enrollment(client, admin_headers, courses):
-    body = client.get(PREVIEW, params={"report_type": "enrollment"}, headers=admin_headers).json()
-    assert body["total"] == len(courses)
+    body = client.get(PREVIEW, params={"report_type": "enrollment", "page_size": 200}, headers=admin_headers).json()
+    assert body["total"] == len(courses) == len(body["items"])
     assert body["filters"]["academic_year"] == "2026-2027" and body["filters"]["semester"] == 1
     keys = [c["key"] for c in body["columns"]]
     assert keys[:4] == ["faculty_name", "category_name", "course_shortname", "course_fullname"]
@@ -64,13 +64,22 @@ def test_export_enrollment_xlsx(client, admin_headers, courses):
 
 
 def test_export_risk_pdf(client, admin_headers, courses):
+    # Toàn trường (5 khoa, > 5.000 dòng) vượt giới hạn PDF -> 422 kèm hướng dẫn thu hẹp bộ lọc / xuất Excel
+    whole = client.get(EXPORT, params={"report_type": "risk", "format": "pdf"}, headers=admin_headers)
+    assert whole.status_code == 422 and "xuất Excel" in whole.json()["detail"]
+    # Khoa lớn nhất nằm trong giới hạn -> xuất được
+    enrolled: dict[int, int] = {}
+    for c in courses:
+        enrolled[c["faculty_id"]] = enrolled.get(c["faculty_id"], 0) + c["enrolled"]
+    faculty_id, rows = max(enrolled.items(), key=lambda x: x[1])
     started = time.perf_counter()
-    res = client.get(EXPORT, params={"report_type": "risk", "format": "pdf"}, headers=admin_headers)
+    res = client.get(EXPORT, params={"report_type": "risk", "format": "pdf", "faculty_id": faculty_id},
+                     headers=admin_headers)
     elapsed = time.perf_counter() - started
     assert res.status_code == 200, res.text
     assert res.headers["content-type"] == "application/pdf" and res.content.startswith(b"%PDF")
     assert len(res.content) > 50_000
-    assert elapsed < 30, f"Xuất PDF {sum(c['enrolled'] for c in courses)} dòng mất {elapsed:.1f}s"
+    assert elapsed < 30, f"Xuất PDF {rows} dòng mất {elapsed:.1f}s"
 
 
 def test_export_traffic_xlsx(client, admin_headers):

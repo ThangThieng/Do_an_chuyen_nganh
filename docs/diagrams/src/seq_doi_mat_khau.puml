@@ -1,0 +1,26 @@
+@startuml seq_doi_mat_khau
+!include _style.iuml
+autonumber
+actor "Người dùng" as U
+participant "AccountPage\n(React)" as FE
+participant "auth.change_password\n(FastAPI)" as API
+database "lms_analytics" as DB
+
+U -> FE : nhập mật khẩu hiện tại, mới, nhập lại
+FE -> FE : kiểm tra từng ô khi rời ô\n(≥ 8 ký tự, có chữ và số)
+FE -> FE : kiểm tra khi Lưu:\nhai lần nhập khớp nhau
+FE -> API : POST /auth/change-password
+API -> DB : SELECT password_hash
+API -> API : verify_password(hiện tại)
+alt sai mật khẩu hiện tại / trùng mật khẩu cũ / không đạt chính sách
+  API --> FE : 400 + lý do
+  FE --> U : thông báo lỗi
+else hợp lệ
+  API -> DB : UPDATE app_user SET password_hash,\npassword_changed_at = now()
+  API -> API : create_access_token() mới
+  API --> FE : 200 {access_token}
+  FE -> FE : thay token trong phiên hiện tại
+  FE --> U : "Đã đổi mật khẩu"
+  note over API, DB : Token cấp trước password_changed_at\nbị get_current_user từ chối (401)
+end
+@enduml

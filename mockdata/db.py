@@ -14,8 +14,10 @@ STRUCTURE_TABLES = (
     "mdl_course_categories", "mdl_course", "mdl_user", "mdl_role", "mdl_context", "mdl_role_assignments",
     "mdl_enrol", "mdl_user_enrolments", "mdl_groups", "mdl_groups_members", "mdl_modules",
     "mdl_course_sections", "mdl_course_modules", "mdl_assign", "mdl_page", "mdl_forum",
-    "mdl_attendance", "mdl_attendance_sessions", "mdl_attendance_statuses",
+    "mdl_attendance", "mdl_attendance_sessions", "mdl_attendance_statuses", "mdl_user_preferences",
 )
+# Bảng nhắn tin (migration moodle V005) – chỉ máy chủ Moodle mô phỏng ghi; xóa cùng khi dựng lại dữ liệu
+MESSAGE_TABLES = ("mdl_message_conversations", "mdl_message_conversation_members", "mdl_messages", "mdl_notifications")
 ACTIVITY_TABLES = (
     "mdl_logstore_standard_log", "mdl_sessions", "mdl_user_lastaccess", "mdl_assign_submission",
     "mdl_attendance_log", "mdl_course_modules_completion",

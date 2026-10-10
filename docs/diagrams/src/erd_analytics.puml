@@ -1,0 +1,108 @@
+@startuml erd_analytics
+!include _style.iuml
+hide circle
+entity "app_user" as U {
+  * user_id : integer <<PK>>
+  --
+  * username : varchar(100) <<UQ>>
+  full_name : varchar(255)
+  email : varchar(255)
+  * role : varchar(10)
+  * password_hash : varchar(255)
+  * is_active : boolean
+  password_changed_at : timestamptz
+  last_login_at : timestamptz
+  * created_at, updated_at : timestamptz
+}
+entity "intervention_log" as I {
+  * id : bigint <<PK, identity>>
+  --
+  * course_id : integer
+  * user_id : integer
+  * teacher_id : integer <<FK>>
+  * action_type : varchar
+  content : text
+  risk_level_at_time : risk_level_t
+  * created_at : timestamptz
+}
+entity "etl_run_log" as R {
+  * run_id : bigint <<PK, identity>>
+  --
+  * job_name : varchar(50)
+  * started_at : timestamptz
+  finished_at : timestamptz
+  * status : varchar(10)
+  rows_extracted, rows_loaded : integer
+  error_message : text
+}
+entity "etl_watermark" as W {
+  * job_name : varchar <<PK>>
+  --
+  * last_log_id : bigint
+  last_run_at : timestamptz
+}
+entity "etl_online_snapshot" as O {
+  * slot_start : timestamp <<PK>>
+  --
+  * online_users : integer
+  * source : varchar
+  etl_run_id : bigint <<FK>>
+}
+entity "fact_server_traffic_hourly" as T {
+  * stat_hour : timestamp <<PK>>
+  --
+  stat_date, hour_of_day, day_of_week <<generated>>
+  total_requests, unique_users : integer
+  login_count, failed_login_count : integer
+  ws_requests : integer
+  peak_online_users : integer
+  avg_online_users : numeric
+  is_peak_hour : boolean
+  etl_run_id : bigint <<FK>>
+}
+entity "fact_course_progress_daily" as P {
+  * course_id : integer <<PK>>
+  * stat_date : date <<PK>>
+  --
+  faculty_id, faculty_name, category_name
+  course_shortname, course_fullname
+  academic_year, semester
+  teacher_ids : integer[]
+  total_enrolled_students, total_active_students
+  active_students_day, active_students_7d
+  assignment_submission_rate, attendance_rate,
+  avg_completion_rate : percent_t (NULL = chưa có dữ liệu)
+  red_count, yellow_count, green_count
+  section_progress : jsonb
+  etl_run_id : bigint <<FK>>
+}
+entity "fact_student_risk_summary" as S {
+  * course_id : integer <<PK>>
+  * user_id : integer <<PK>>
+  * snapshot_date : date <<PK>>
+  --
+  faculty_*, course_*, academic_year, semester
+  teacher_ids : integer[]
+  student_code, student_name, email
+  C2: total_access_count, access_count_7d/14d,
+      last_access_time, days_since_last_access
+  C1: total/attended/absent_sessions,
+      absence_rate, attendance_status
+  C3: total/submitted_assignments,
+      missing_assignments_count, late_submissions
+  score_attendance, score_inactivity,
+  score_assignment : 0..2
+  risk_score : 0..100
+  risk_level : risk_level_t
+  risk_reasons, weekly_activity,
+  assignment_detail : jsonb
+  etl_run_id : bigint <<FK>>
+}
+U ||--o{ I : teacher_id
+R |o--o{ O : etl_run_id
+R |o--o{ T : etl_run_id
+R |o--o{ P : etl_run_id
+R |o--o{ S : etl_run_id
+P .. S : khóa logic course_id
+I .. S : khóa logic (course_id, user_id)
+@enduml

@@ -47,12 +47,19 @@ def frame(conn, query: str, params=None) -> pd.DataFrame:
 
 
 @pytest.fixture(scope="module")
-def sample_courses(analytics) -> list[int]:
-    ids = [r[0] for r in analytics.execute(
-        "SELECT DISTINCT course_id FROM analytics.fact_course_progress_daily WHERE stat_date = %s ORDER BY 1",
-        (SNAPSHOT,))]
-    assert len(ids) == 15, "Chưa chạy backfill tới AS_OF?"
-    return sorted(random.Random(2026).sample(ids, 5))
+def sample_courses(moodle, analytics) -> list[int]:
+    """Mỗi khoa một môn lấy ngẫu nhiên (cố định seed) – đối soát phủ đủ 5 khoa và các loại môn."""
+    expected = moodle.execute("SELECT COUNT(*) FROM mdl_course WHERE id <> 1").fetchone()[0]
+    rows = analytics.execute(
+        "SELECT faculty_id, course_id FROM analytics.fact_course_progress_daily WHERE stat_date = %s ORDER BY 1, 2",
+        (SNAPSHOT,)).fetchall()
+    assert len(rows) == expected, "Chưa chạy backfill tới AS_OF?"
+    by_faculty: dict[int, list[int]] = {}
+    for faculty_id, course_id in rows:
+        by_faculty.setdefault(faculty_id, []).append(course_id)
+    assert len(by_faculty) == len(mock_cfg.FACULTIES)
+    rng = random.Random(2026)
+    return sorted(rng.choice(ids) for ids in by_faculty.values())
 
 
 # Danh sách SV hợp lệ theo đúng dạng JOIN của SPEC 1.2 (không dùng lại SQL của ETL)
@@ -189,12 +196,14 @@ def test_peak_hours_are_marked(analytics):
 
 
 # ----------------------------------------------------------------------------- idempotency (SPEC 6.1)
+# Băm từng dòng rồi băm chuỗi các mã băm (32 byte/dòng): gộp nguyên văn JSON của ~730 nghìn dòng cảnh báo
+# vượt giới hạn chuỗi 1 GB của PostgreSQL. Một thay đổi ở bất kỳ cột nào vẫn làm đổi checksum.
 CHECKSUM_SQL = {
-    "fact_student_risk_summary": """SELECT COUNT(*), md5(string_agg(row_to_json(t)::text, '|' ORDER BY course_id, user_id, snapshot_date))
+    "fact_student_risk_summary": """SELECT COUNT(*), md5(string_agg(md5(row_to_json(t)::text), '' ORDER BY course_id, user_id, snapshot_date))
         FROM (SELECT * FROM analytics.fact_student_risk_summary) t""",
-    "fact_course_progress_daily": """SELECT COUNT(*), md5(string_agg(row_to_json(t)::text, '|' ORDER BY course_id, stat_date))
+    "fact_course_progress_daily": """SELECT COUNT(*), md5(string_agg(md5(row_to_json(t)::text), '' ORDER BY course_id, stat_date))
         FROM (SELECT * FROM analytics.fact_course_progress_daily) t""",
-    "fact_server_traffic_hourly": """SELECT COUNT(*), md5(string_agg(row_to_json(t)::text, '|' ORDER BY stat_hour))
+    "fact_server_traffic_hourly": """SELECT COUNT(*), md5(string_agg(md5(row_to_json(t)::text), '' ORDER BY stat_hour))
         FROM (SELECT * FROM analytics.fact_server_traffic_hourly) t""",
 }
 

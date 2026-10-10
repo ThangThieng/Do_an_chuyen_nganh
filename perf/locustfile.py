@@ -1,6 +1,8 @@
 """
 Kiểm thử tải API (SPEC 6.2 dòng "API"): 50 người dùng đồng thời (40 GV, 10 Admin), think-time 2–5 giây.
 Mục tiêu: p95 < 500 ms, p99 < 1 s, lỗi < 0,1%.
+v1.2 (kế hoạch Mục 7.7): thêm các API so sánh khoa, xu hướng rủi ro, minh bạch (/meta), xem trước luật theo môn,
+danh sách cần liên hệ, lịch sử gửi tin. Chỉ các API ĐỌC và xem trước (không ghi CSDL, không gửi tin).
 
     $env:LMS_DEMO_PASSWORD = "<mật khẩu demo>"
     python -m locust -f perf/locustfile.py --host http://127.0.0.1:8000 --headless -u 50 -r 5 -t 10m \
@@ -78,6 +80,28 @@ class TeacherUser(DashboardUser):
         self.client.get(f"/api/v1/teacher/courses/{cid}/students/{uid}", name="GET /teacher/courses/{id}/students/{uid}")
         self.client.get(f"/api/v1/teacher/courses/{cid}/students/{uid}/compare", name="GET /teacher/courses/{id}/students/{uid}/compare")
 
+    @task(2)
+    def risk_trend_and_rule(self):
+        cid = self.course()
+        self.client.get(f"/api/v1/teacher/courses/{cid}/risk-trend", params={"granularity": random.choice(["week", "day"])},
+                        name="GET /teacher/courses/{id}/risk-trend")
+        self.client.get("/api/v1/meta/risk-rule", params={"course_id": cid}, name="GET /meta/risk-rule?course_id")
+
+    @task(1)
+    def rules_preview(self):
+        cid = self.course()
+        state = self.client.get(f"/api/v1/teacher/courses/{cid}/risk-rules", name="GET /teacher/courses/{id}/risk-rules").json()
+        preset = random.choice(state["presets"])
+        self.client.post(f"/api/v1/teacher/courses/{cid}/risk-rules/preview",
+                         json={"preset": preset["code"], "params": preset["params"]},
+                         name="POST /teacher/courses/{id}/risk-rules/preview")
+
+    @task(1)
+    def interventions(self):
+        cid = self.course()
+        self.client.get(f"/api/v1/teacher/courses/{cid}/contact-list", name="GET /teacher/courses/{id}/contact-list")
+        self.client.get(f"/api/v1/teacher/courses/{cid}/messages", name="GET /teacher/courses/{id}/messages")
+
     @task(1)
     def progress(self):
         self.client.get(f"/api/v1/teacher/courses/{self.course()}/progress", params={"granularity": random.choice(["day", "week"])},
@@ -96,8 +120,26 @@ class AdminUser(DashboardUser):
     @task(3)
     def overview(self):
         self.client.get("/api/v1/admin/overview/kpis", name="GET /admin/overview/kpis")
-        self.client.get("/api/v1/admin/enrollment/by-faculty", name="GET /admin/enrollment/by-faculty")
+        self.client.get("/api/v1/admin/compare/faculties", name="GET /admin/compare/faculties")
+        self.client.get("/api/v1/admin/risk-trend", params={"granularity": random.choice(["week", "day"])},
+                        name="GET /admin/risk-trend (toàn trường)")
         self.client.get("/api/v1/admin/traffic/realtime", name="GET /admin/traffic/realtime")
+
+    @task(2)
+    def faculty_page(self):
+        fid = random.choice(self.faculties)
+        items = self.client.get(f"/api/v1/admin/enrollment/faculties/{fid}/courses",
+                                name="GET /admin/enrollment/faculties/{id}/courses").json()["items"]
+        self.client.get("/api/v1/admin/risk-trend", params={"faculty_id": fid}, name="GET /admin/risk-trend?faculty_id")
+        if items:
+            cid = random.choice(items)["course_id"]
+            self.client.get(f"/api/v1/admin/courses/{cid}/risk-summary", name="GET /admin/courses/{id}/risk-summary")
+            self.client.get(f"/api/v1/admin/courses/{cid}/risk-students", name="GET /admin/courses/{id}/risk-students")
+
+    @task(1)
+    def transparency(self):
+        self.client.get("/api/v1/meta/metrics", name="GET /meta/metrics")
+        self.client.get("/api/v1/meta/freshness", name="GET /meta/freshness")
 
     @task(2)
     def drill_down(self):

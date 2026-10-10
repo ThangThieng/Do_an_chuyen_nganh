@@ -50,6 +50,8 @@ class RiskSummaryOut(Stamped):
     by_criterion: Criteria          # số SV có điểm tiêu chí > 0
     by_criterion_red: Criteria      # số SV có điểm tiêu chí = 2
     attendance_no_data: int
+    prev_week: dict | None = None   # {snapshot_date, red, yellow, green, total} của 7 ngày trước
+    rule: dict | None = None        # luật đang áp dụng cho môn: {rule_set_id, scope, label, preset, thresholds, ...}
 
 
 class RiskStudent(BaseModel):
@@ -79,6 +81,8 @@ class RiskStudent(BaseModel):
     access_count_14d: int
     last_access_time: datetime | None
     days_since_last_access: int | None
+    max_consecutive_missing: int = 0
+    rule_set_id: int = 1
 
 
 class RiskStudentsOut(Page[RiskStudent]):
@@ -121,6 +125,8 @@ class InterventionOut(BaseModel):
     created_at: datetime
     teacher_id: int
     teacher_name: str | None
+    origin: str = "MANUAL"
+    outbound_id: int | None = None
 
 
 class StudentDetailOut(RiskStudent, Stamped):
@@ -132,6 +138,7 @@ class StudentDetailOut(RiskStudent, Stamped):
     weekly_activity: list[WeekActivity]
     assignment_detail: list[AssignmentItem]
     class_avg_access: float | None
+    attendance_detail: list[dict] = []
     risk_history: list[HistoryPoint]
     interventions: list[InterventionOut]
 

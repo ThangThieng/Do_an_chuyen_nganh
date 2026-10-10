@@ -1,0 +1,164 @@
+@startuml erd_moodle
+!include _style.iuml
+hide circle
+hide empty members
+entity mdl_course_categories {
+  * id
+  --
+  name, parent, path, depth
+}
+entity mdl_course {
+  * id
+  --
+  category, fullname, shortname,
+  startdate, enddate, visible
+}
+entity mdl_course_sections {
+  * id
+  --
+  course, section, name
+}
+entity mdl_user {
+  * id
+  --
+  username, idnumber (MSSV),
+  firstname, lastname, email,
+  deleted, suspended
+}
+entity mdl_role {
+  * id
+  --
+  shortname
+}
+entity mdl_context {
+  * id
+  --
+  contextlevel, instanceid
+}
+entity mdl_role_assignments {
+  * id
+  --
+  roleid, contextid, userid
+}
+entity mdl_enrol {
+  * id
+  --
+  courseid, enrol, status
+}
+entity mdl_user_enrolments {
+  * id
+  --
+  enrolid, userid, status,
+  timestart, timeend
+}
+entity mdl_groups {
+  * id
+  --
+  courseid, name
+}
+entity mdl_groups_members {
+  * id
+  --
+  groupid, userid
+}
+entity mdl_logstore_standard_log {
+  * id
+  --
+  eventname, crud, edulevel,
+  userid, courseid, contextinstanceid,
+  timecreated, origin
+}
+entity mdl_sessions {
+  * id
+  --
+  userid, timemodified
+}
+entity mdl_user_lastaccess {
+  * id
+  --
+  userid, courseid, timeaccess
+}
+entity mdl_modules {
+  * id
+  --
+  name
+}
+entity mdl_course_modules {
+  * id
+  --
+  course, module, instance, section,
+  completion, completionexpected
+}
+entity mdl_course_modules_completion {
+  * id
+  --
+  coursemoduleid, userid, completionstate
+}
+entity mdl_assign {
+  * id
+  --
+  course, name, duedate, teamsubmission
+}
+entity mdl_assign_submission {
+  * id
+  --
+  assignment, userid, groupid,
+  status, timemodified, latest
+}
+entity mdl_page {
+  * id
+  --
+  course, name
+}
+entity mdl_forum {
+  * id
+  --
+  course, name
+}
+entity mdl_attendance {
+  * id
+  --
+  course, name
+}
+entity mdl_attendance_sessions {
+  * id
+  --
+  attendanceid, groupid, sessdate, duration
+}
+entity mdl_attendance_statuses {
+  * id
+  --
+  attendanceid, acronym, grade
+}
+entity mdl_attendance_log {
+  * id
+  --
+  sessionid, studentid, statusid
+}
+mdl_course_categories ||--o{ mdl_course
+mdl_course ||--o{ mdl_course_sections
+mdl_course ||--o{ mdl_enrol
+mdl_enrol ||--o{ mdl_user_enrolments
+mdl_user ||--o{ mdl_user_enrolments
+mdl_role ||--o{ mdl_role_assignments
+mdl_context ||--o{ mdl_role_assignments
+mdl_user ||--o{ mdl_role_assignments
+mdl_course ||--o{ mdl_groups
+mdl_groups ||--o{ mdl_groups_members
+mdl_user ||--o{ mdl_groups_members
+mdl_user ||--o{ mdl_logstore_standard_log
+mdl_user ||--o{ mdl_sessions
+mdl_user ||--o{ mdl_user_lastaccess
+mdl_course ||--o{ mdl_course_modules
+mdl_modules ||--o{ mdl_course_modules
+mdl_course_modules ||--o{ mdl_course_modules_completion
+mdl_course ||--o{ mdl_assign
+mdl_course ||--o{ mdl_page
+mdl_course ||--o{ mdl_forum
+mdl_assign ||--o{ mdl_assign_submission
+mdl_course ||--o{ mdl_attendance
+mdl_attendance ||--o{ mdl_attendance_sessions
+mdl_attendance ||--o{ mdl_attendance_statuses
+mdl_attendance_sessions ||--o{ mdl_attendance_log
+mdl_attendance_statuses ||--o{ mdl_attendance_log
+@enduml

@@ -20,13 +20,14 @@ COPY database ./database
 COPY mockdata ./mockdata
 COPY etl ./etl
 COPY backend ./backend
+COPY tools ./tools
 COPY docker/bootstrap.sh ./docker/bootstrap.sh
 
-# Chạy bằng user thường; thư mục ground truth của mock data cần quyền ghi
+# Chạy bằng user thường; thư mục ground truth của mock data và thư mục sao lưu cần quyền ghi
 RUN sed -i 's/\r$//' docker/bootstrap.sh \
     && useradd --create-home --uid 10001 app \
-    && mkdir -p mockdata/output \
-    && chown -R app:app mockdata/output
+    && mkdir -p mockdata/output backups \
+    && chown -R app:app mockdata/output backups
 USER app
 
 CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

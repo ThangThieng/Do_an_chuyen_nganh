@@ -1,16 +1,16 @@
 /**
  * Màu & nhãn dùng chung.
  *
- * - Đèn giao thông: đúng màu của kế hoạch (SPEC 5.4) và LUÔN đi kèm biểu tượng + chữ,
- *   không bao giờ để màu đứng một mình.
+ * - Đèn giao thông: đúng màu của kế hoạch (SPEC 5.4) và LUÔN đi kèm chữ (“Nguy cơ cao”, “Cần lưu ý”, “An toàn”),
+ *   không bao giờ để màu đứng một mình. Không dùng icon trang trí (v1.2 – giảm nhiễu giao diện).
  * - Chuỗi dữ liệu: 3 màu đầu của bảng màu phân loại đã kiểm định mù màu (skill dataviz),
  *   dùng theo thứ tự cố định, không xoay vòng.
  * - Chữ luôn dùng màu mực (ink/secondary/muted), không tô bằng màu dữ liệu.
  */
 export const RISK = {
-  RED: { color: "#D64545", tint: "#FBEAEA", ink: "#9B2C2C", icon: "●", label: "Nguy cơ cao" },
-  YELLOW: { color: "#E0A100", tint: "#FDF3D8", ink: "#7A5800", icon: "▲", label: "Cần lưu ý" },
-  GREEN: { color: "#2E9D5B", tint: "#E3F3EA", ink: "#1E6B3E", icon: "✔", label: "An toàn" },
+  RED: { color: "#D64545", tint: "#FBEAEA", ink: "#9B2C2C", label: "Nguy cơ cao", short: "Đỏ" },
+  YELLOW: { color: "#E0A100", tint: "#FDF3D8", ink: "#7A5800", label: "Cần lưu ý", short: "Vàng" },
+  GREEN: { color: "#2E9D5B", tint: "#E3F3EA", ink: "#1E6B3E", label: "An toàn", short: "Xanh" },
 };
 export const RISK_LEVELS = ["RED", "YELLOW", "GREEN"];
 
@@ -46,13 +46,29 @@ export const SEQUENTIAL_BLUE = [
 ];
 
 export const ACTIONS = {
-  MESSAGE: { icon: "✉", label: "Gửi tin nhắn Moodle" },
-  EMAIL: { icon: "📧", label: "Email" },
-  NOTE: { icon: "📝", label: "Ghi chú" },
-  MEETING: { icon: "📅", label: "Hẹn gặp" },
+  MESSAGE: { label: "Tin nhắn Moodle" },
+  EMAIL: { label: "Email" },
+  NOTE: { label: "Ghi chú" },
+  MEETING: { label: "Hẹn gặp" },
 };
 
 /** Màu nút/link chính: bậc 500 của thang xanh, chữ trắng đạt 5,5:1 (màu chuỗi #2a78d6 chỉ 4,47:1). */
 export const UI_PRIMARY = "#256abf";
 
 export const FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+/** Kênh gửi tin của Trung tâm can thiệp. */
+export const CHANNELS = {
+  MOODLE: { label: "Tin nhắn Moodle" },
+  EMAIL: { label: "Email" },
+};
+
+/** Trạng thái tin trong hàng đợi gửi. */
+export const MESSAGE_STATUS = {
+  PENDING_REVIEW: { label: "Chờ duyệt", tone: "YELLOW" },
+  QUEUED: { label: "Chờ gửi", tone: null },
+  SENDING: { label: "Đang gửi", tone: null },
+  SENT: { label: "Đã gửi", tone: "GREEN" },
+  FAILED: { label: "Lỗi", tone: "RED" },
+  CANCELLED: { label: "Đã hủy", tone: null },
+};

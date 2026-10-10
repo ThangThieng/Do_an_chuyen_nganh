@@ -160,17 +160,6 @@ body {
   margin-top: 2px;
 }
 
-.live-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-  margin-left: 6px;
-  vertical-align: middle;
-  box-shadow: 0 0 0 3px rgba(46, 157, 91, 0.2);
-}
-
 .risk-badge {
   display: inline-flex;
   align-items: center;
@@ -286,3 +275,189 @@ body {
     height: 260px;
   }
 }
+
+.row-inactive td {
+  color: var(--muted);
+  background: #fafafa;
+}
+
+.help-body h4 {
+  margin: 16px 0 6px;
+}
+
+.help-body p,
+.help-body li {
+  line-height: 1.65;
+}
+
+/* ============================================================ v1.2 – giảm nhiễu, so sánh, xu hướng, minh bạch */
+.risk-badge { padding: 1px 10px; }
+.risk-badge.compact { padding: 0 7px; font-size: 11px; line-height: 18px; }
+
+.risk-legend-row {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.risk-legend-row:disabled { color: inherit; }
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 8px;
+}
+.dot-key {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+.chip {
+  border: 1px solid #d9d9d9;
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  background: #fff;
+  color: inherit;
+}
+.chip.on { background: #1f2937; color: #fff; border-color: #1f2937; }
+.chip-hint { color: var(--muted); }
+.chip.on .chip-hint { color: #d1d5db; }
+
+.delta { color: var(--secondary); font-weight: 600; }
+.delta.bad { color: #9b2c2c; }
+.delta.good { color: #1e6b3e; }
+
+.info-link.ant-btn { padding: 0 4px; height: auto; font-size: 12.5px; }
+.info-link.compact.ant-btn { font-size: 12px; font-weight: 400; margin-left: 4px; }
+.kpi-label { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.header-info .info-link.ant-btn { color: #cbd5e1; }
+.has-tip { border-bottom: 1px dotted var(--muted); cursor: help; }
+
+.level-crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.level-step { display: inline-flex; align-items: center; gap: 4px; }
+.level-step .sep { color: #9ca3af; margin: 0 2px; }
+.level-step .on { font-weight: 650; color: var(--ink); }
+.level-step .off { color: var(--muted); }
+
+.chart-title { font-weight: 600; margin-bottom: 6px; }
+.section-title { font-weight: 650; font-size: 15px; margin-top: 8px; color: var(--secondary); }
+.small { font-size: 12px; }
+
+.score-chips { display: inline-flex; gap: 4px; }
+.score-chip {
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  background: #f3f4f6;
+  color: var(--secondary);
+}
+.score-chip.s1 { background: #fdf3d8; color: #7a5800; }
+.score-chip.s2 { background: #fbeaea; color: #9b2c2c; font-weight: 600; }
+
+.stack-bar, .weight-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f0f1f4;
+}
+.stack-bar span, .weight-bar span { display: block; height: 100%; border-right: 2px solid #fff; }
+.weight-bar { height: 10px; margin: 10px 0 6px; }
+.impact-row {
+  display: grid;
+  grid-template-columns: 96px 1fr 120px;
+  gap: 10px;
+  align-items: center;
+  margin: 6px 0;
+}
+.rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: #fcfcfd;
+}
+.message-body {
+  white-space: pre-line;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  background: #fff;
+}
+
+/* Tô nổi khoa/môn theo mức rủi ro đang chọn trên biểu đồ tròn (kế hoạch Mục 3.2) */
+.focus-note {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--page);
+}
+.ant-table-wrapper .row-focus > td {
+  background: #eef4fc;
+  font-weight: 600;
+}
+
+/*
+ * Thẻ màu (Tag) đạt tương phản WCAG AA: màu chữ mặc định của Ant Design (bậc 6–7) trên nền nhạt chỉ đạt ~3–4:1.
+ * Giữ nền và viền của Ant Design, chỉ đổi chữ sang bậc đậm cùng tông (>= 4,5:1 trên nền thẻ).
+ */
+.ant-tag.ant-tag-green, .ant-tag.ant-tag-success { color: #1e6b3e; }
+.ant-tag.ant-tag-red, .ant-tag.ant-tag-error { color: #9b2c2c; }
+.ant-tag.ant-tag-orange { color: #8a4300; }
+.ant-tag.ant-tag-gold, .ant-tag.ant-tag-warning { color: #7a5200; }
+.ant-tag.ant-tag-blue, .ant-tag.ant-tag-processing { color: #174a8a; }
+.ant-tag.ant-tag-geekblue { color: #2b3a8f; }
+.ant-tag.ant-tag-cyan { color: #0b5560; }
+
+/* Thanh chọn nhiều lựa chọn (vd mẫu luật cảnh báo) xuống dòng trên màn hình hẹp thay vì làm trang cuộn ngang */
+.wrap-segmented { max-width: 100%; }
+.wrap-segmented .ant-segmented-group { flex-wrap: wrap; row-gap: 2px; }
+
+/* Màn hình hẹp: tiêu đề thẻ luôn đọc được – phần thao tác bên phải (ô tìm, nút chuyển, "Nguồn & cách tính") xuống dòng */
+/* (bộ chọn 3 lớp để thắng quy tắc CSS-in-JS ".css-xxx.ant-card .ant-card-head-title" của Ant Design) */
+@media (max-width: 576px) {
+  .ant-card.ant-card .ant-card-head-wrapper { flex-wrap: wrap; row-gap: 6px; padding: 6px 0; }
+  .ant-card.ant-card .ant-card-head-title { flex: 1 1 100%; white-space: normal; overflow: visible; }
+  .ant-card.ant-card .ant-card-extra { margin-inline-start: 0; max-width: 100%; }
+}
+
+/* Tiêu đề mục trong cửa sổ chi tiết (cùng dáng với Divider có chữ của Ant Design) */
+.modal-section { display: flex; align-items: center; gap: 4px; margin: 20px 0 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+.modal-section h4 { margin: 0; font-size: 14px; font-weight: 500; }
+.drawer-scroll { height: 100%; overflow-y: auto; padding: 24px; }
+.drawer-scroll:focus-visible { outline: 2px solid var(--ui-primary, #256abf); outline-offset: -2px; }
+
+/* Màn hình hẹp: thanh tiêu đề cao và xuống dòng – thông báo hiện ở đáy màn hình để không che menu */
+@media (max-width: 768px) {
+  .ant-message.ant-message { top: auto !important; bottom: 16px; }
+}
+.table-scroll { overflow-x: auto; }
+.table-scroll .ant-table { min-width: max-content; }

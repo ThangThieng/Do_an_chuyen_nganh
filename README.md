@@ -5,13 +5,21 @@
 
 Hệ thống đọc dữ liệu thô từ Moodle, chạy tiến trình ETL để tính toán sẵn các chỉ số, rồi hiển thị lên dashboard cho hai nhóm người dùng:
 
-- **Quản trị viên** — theo dõi quy mô đào tạo, lưu lượng truy cập máy chủ, xuất báo cáo Excel/PDF.
-- **Giảng viên** — nhận cảnh báo "đèn giao thông" về sinh viên có nguy cơ bỏ học, theo dõi tiến độ lớp.
+- **Quản trị viên** — nhìn từ toàn trường xuống khoa, môn, sinh viên; so sánh các khoa; theo dõi lưu lượng; xuất báo cáo
+  Excel/PDF; biết mỗi con số lấy từ bảng Moodle nào và tính thế nào.
+- **Giảng viên** — nhận cảnh báo "đèn giao thông" kèm xu hướng theo tuần, đặt luật cảnh báo riêng cho môn, gửi tin nhắn
+  Moodle / email cá nhân hóa và nhắc tự động sinh viên, theo dõi tiến độ lớp.
+
+Phiên bản **1.2** (10/2026) hoàn thành theo [kế hoạch góp ý giao diện](docs/gop_y_giao_dien/TongHop_GopY_GiaoDien_va_KeHoach_v1.2.docx):
+so sánh khoa/môn, xu hướng rủi ro, điều hướng 4 cấp, minh bạch nguồn dữ liệu, luật cảnh báo theo môn, trung tâm can thiệp
+đa kênh, dữ liệu mô phỏng 5 khoa theo chuẩn Moodle 3.9.
 
 ```
 Moodle (moodle_src)  ──ETL Python──▶  PostgreSQL lms_analytics  ──FastAPI──▶  React + Chart.js
-   26 bảng mdl_*         5 phút /          3 bảng fact              JWT, RBAC      Admin · Giảng viên
-   1,2 triệu dòng log    giờ / đêm         145.702 dòng             Excel/PDF
+   30 bảng mdl_*         5 phút /          3 bảng fact + luật,      JWT, RBAC      Admin · Giảng viên
+   5 khoa, 58 môn        giờ / đêm         hàng đợi gửi tin         Excel/PDF
+   6,4 triệu dòng log         │
+        ▲                     └── gửi tin nhắn Moodle (Web Service) / email (SMTP) ──▶ sinh viên
 ```
 
 ---
@@ -65,6 +73,8 @@ Migration tự viết (`database/migrate.py`), không dùng Alembic — file SQL
 | **PyJWT** | 2.9 | Ký và xác thực token JWT (HS256) |
 | **bcrypt** | 4.2 | Băm mật khẩu một chiều |
 | **cachetools** | 5.5 | Cache TTL 60 giây cho endpoint KPI |
+| **httpx** | 0.27 | Gọi Moodle Web Service (`core_message_send_instant_messages`) |
+| **python-multipart** | 0.0.x | Đọc form của Moodle REST ở máy chủ Moodle mô phỏng |
 | **openpyxl** | 3.1 | Xuất báo cáo Excel (chế độ write-only) |
 | **ReportLab** | 4.2 | Xuất báo cáo PDF khổ A4 ngang |
 
@@ -94,12 +104,13 @@ Migration tự viết (`database/migrate.py`), không dùng Alembic — file SQL
 | **Playwright** | Kiểm thử đầu-cuối trên trình duyệt thật |
 | **axe-core** | Kiểm tra khả năng tiếp cận WCAG 2.1 A/AA |
 | **Locust** | Kiểm thử tải API (50 người dùng đồng thời) |
+| **aiosmtpd** | Máy chủ thư cục bộ trong kiểm thử – chứng minh gửi email bằng đúng mã SMTP khi vận hành |
 
 ### Đóng gói
 
 | Công nghệ | Vai trò |
 |---|---|
-| **Docker + Docker Compose** | Demo trọn gói 5 dịch vụ bằng một lệnh |
+| **Docker + Docker Compose** | Demo trọn gói 6 dịch vụ bằng một lệnh (gồm máy chủ Moodle mô phỏng) |
 | **Nginx** | Phục vụ bản build React, proxy `/api` sang backend |
 
 ---
@@ -115,7 +126,7 @@ Migration tự viết (`database/migrate.py`), không dùng Alembic — file SQL
 | Node.js | 18 (bản LTS) | Đã kèm npm |
 | Git | bất kỳ | Để clone dự án |
 
-Dung lượng đĩa cần: khoảng **1,5 GB** (mã nguồn 7 MB + thư viện 160 MB + hai CSDL 830 MB).
+Dung lượng đĩa cần: khoảng **5 GB** (mã nguồn + thư viện ~170 MB, hai CSDL 3,9 GB với dữ liệu mô phỏng 5 khoa).
 
 ### Cách 2 — Chạy bằng Docker
 
@@ -163,22 +174,22 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 ### 3.3 Cài đặt và dựng dữ liệu
 
-Chạy lần lượt, đợi từng lệnh xong hẳn. Tổng thời gian khoảng **10–15 phút**.
+Chạy lần lượt, đợi từng lệnh xong hẳn. Tổng thời gian khoảng **45 phút** (đo trên Intel i5-12450H, 16 GB RAM).
 
 ```powershell
-# 1. Cài thư viện Python + npm, tạo bảng trong 2 CSDL          (~3 phút)
+# 1. Cài thư viện Python + npm, tạo bảng trong 2 CSDL               (~3 phút)
 .\scripts\lms.ps1 setup
 
-# 2. Sinh cấu trúc Moodle: 15 môn, 500 SV, 8 giảng viên        (~1 phút)
+# 2. Sinh cấu trúc Moodle: 5 khoa, 58 môn, 3.000 SV, 28 giảng viên    (~1 phút)
 .\scripts\lms.ps1 seed
 
-# 3. Sinh hành vi học tập: 1,2 triệu dòng log truy cập         (~4 phút)
+# 3. Sinh hành vi học tập: 6,4 triệu dòng log truy cập              (~7 phút)
 .\scripts\lms.ps1 mock
 
-# 4. Chạy ETL nạp 3 bảng fact                                  (~6 phút)
+# 4. Chạy ETL nạp lịch sử 3 bảng fact (07/09 → 06/11/2026)          (~32 phút)
 .\scripts\lms.ps1 etl-backfill
 
-# 5. Tạo 9 tài khoản đăng nhập
+# 5. Tạo 29 tài khoản đăng nhập (1 quản trị + 28 giảng viên)
 $env:BACKEND_SEED_PASSWORD = "Lms@2026demo"
 .\scripts\lms.ps1 users
 ```
@@ -203,6 +214,14 @@ Mở **hai cửa sổ PowerShell**, cùng ở thư mục dự án:
 
 Frontend tự chuyển tiếp mọi request `/api` sang `http://127.0.0.1:8000` nhờ cấu hình proxy trong [frontend/vite.config.js](frontend/vite.config.js) — không cần sửa CORS.
 
+```powershell
+# ───── Cửa sổ 3 (để gửi tin nhắn Moodle): máy chủ Moodle 3.9 mô phỏng ─────
+.\scripts\lms.ps1 moodle-stub
+```
+→ `http://localhost:8091` — hộp tin của một sinh viên: `http://localhost:8091/stub/inbox?userid=<mdl_user.id>`.
+Email ở chế độ mặc định được ghi thành file `.eml` trong `var/mail_outbox/` (mở bằng Outlook/Thunderbird).
+Muốn job nhắc tự động và gửi hàng đợi chạy theo lịch: `.\scripts\lms.ps1 etl` (cửa sổ 4).
+
 ### 3.5 Bảng tra cứu toàn bộ lệnh
 
 | Lệnh tắt | Lệnh đầy đủ tương đương | Tác dụng |
@@ -214,11 +233,13 @@ Frontend tự chuyển tiếp mọi request `/api` sang `http://127.0.0.1:8000` 
 | `lms.ps1 users` | `python -m backend.app.cli sync-users` | Tạo/cập nhật tài khoản |
 | `lms.ps1 api` | `python -m uvicorn backend.app.main:app --port 8000` | Chạy Backend |
 | `lms.ps1 web` | `cd frontend; npm run dev` | Chạy Frontend |
+| `lms.ps1 moodle-stub` | `python -m tools.moodle_ws_stub` | Máy chủ Moodle 3.9 mô phỏng :8091 (kênh tin nhắn) |
+| `lms.ps1 etl` | `python -m etl.scheduler` | ETL theo lịch: tính rủi ro, nhắc tự động, gửi hàng đợi mỗi phút |
+| `lms.ps1 messaging-check` | `python -m backend.app.cli messaging-check [--send-test-email <địa chỉ>]` | In cấu hình kênh gửi tin (che bí mật), thử kết nối SMTP/Moodle |
 | `lms.ps1 test` | `python -m pytest -q` + `npm test` | Kiểm thử |
 | `lms.ps1 e2e` | `npx playwright test` | Kiểm thử giao diện thật |
 | `lms.ps1 bench` | `python -m perf.build_x10` + `explain_queries` | Đo hiệu năng |
 | `lms.ps1 docker` | `docker compose up --build -d` | Demo bằng Docker |
-| — | `python -m etl.scheduler` | Chạy ETL tự động nền (tùy chọn) |
 
 ### 3.6 Chạy bằng Docker (không cần cài PostgreSQL/Python/Node)
 
@@ -236,12 +257,12 @@ BACKEND_SEED_PASSWORD=Lms@2026demo
 Rồi chạy:
 ```powershell
 docker compose --env-file docker/.env up --build -d
-docker compose --env-file docker/.env logs -f init    # chờ dòng "[init] Hoàn tất." (~5–8 phút)
+docker compose --env-file docker/.env logs -f init    # chờ dòng "[init] Hoàn tất." (~40–50 phút với dữ liệu 5 khoa)
 ```
 
 Mở **`http://localhost:8080`**.
 
-Compose gồm 5 dịch vụ:
+Compose gồm 6 dịch vụ:
 
 | Dịch vụ | Vai trò |
 |---|---|
@@ -249,6 +270,7 @@ Compose gồm 5 dịch vụ:
 | `init` | Chạy một lần: migrate → seed → mock → ETL backfill → tạo tài khoản |
 | `etl` | APScheduler chạy nền |
 | `backend` | FastAPI, 2 worker |
+| `moodle-stub` | Máy chủ Moodle 3.9 mô phỏng cho kênh tin nhắn, mở cổng **8091** để xem hộp tin sinh viên. Bỏ khi trỏ `MOODLE_WS_URL` tới Moodle thật |
 | `web` | Nginx phục vụ bản build React và proxy `/api` |
 
 Dữ liệu nằm trong volume `pgdata`. Lệnh `docker compose down -v` xóa sạch để làm lại từ đầu.
@@ -264,7 +286,7 @@ Dữ liệu nằm trong volume `pgdata`. Lệnh `docker compose down -v` xóa s�
 
 ### 4.1 Đăng nhập
 
-![Trang đăng nhập](docs/images/00_login_error.png)
+![Trang đăng nhập](docs/images/report/mh01_dang_nhap_loi.png)
 
 Nhập tên đăng nhập và mật khẩu (xem [Phần 5](#5-tài-khoản-đăng-nhập)). Hệ thống tự đưa bạn tới trang phù hợp với vai trò:
 
@@ -277,72 +299,85 @@ Khi nhập sai, hệ thống chỉ báo *"Sai tên đăng nhập hoặc mật kh
 
 ### PHẦN DÀNH CHO QUẢN TRỊ VIÊN
 
-### 4.2 Trang Tổng quan
+### 4.2 Trang Tổng quan – cấp Toàn trường
 
-![Trang tổng quan](docs/images/01_admin_overview.png)
+![Trang tổng quan](docs/images/report/mh02_tong_quan.png)
 
-Màn hình chia làm 6 khu vực, từ trên xuống:
+Mọi trang quản trị đi theo **4 cấp**, từ bức tranh lớn tới từng sinh viên. Thanh cấp xem ở đầu trang cho biết đang ở đâu:
 
-**① Hàng bộ lọc** — Năm học · Học kỳ · Khoa.
-Mọi biểu đồ và bảng bên dưới đổi theo bộ lọc này. Nút **Export** xuất ngay báo cáo theo đúng bộ lọc đang chọn.
+```
+Toàn trường  ›  Khoa  ›  Môn học  ›  Sinh viên
+/admin          /admin/faculties/:id   /admin/courses/:id   ?student=:id (cửa sổ chi tiết)
+```
 
-**② Sáu thẻ KPI** — các con số tổng quan:
+Nút Back của trình duyệt và F5 luôn giữ đúng cấp và học kỳ (học kỳ nằm trên URL `?ay=…&sem=…`).
+
+Trang Tổng quan, từ trên xuống:
+
+**① Bộ lọc** — Năm học · Học kỳ; chọn một Khoa sẽ mở trang của khoa đó. Nút **Xuất báo cáo** xuất Excel/PDF theo học kỳ.
+
+**② Sáu thẻ KPI**
 
 | Thẻ | Ý nghĩa |
 |---|---|
-| Tổng môn học | Số môn đang diễn ra trong học kỳ đã chọn |
-| Sinh viên đăng ký | Tổng lượt ghi danh còn hiệu lực |
-| Sinh viên có tương tác | Số em thực sự vào học, kèm tỷ lệ % |
-| Người đang online | Đếm theo thời gian thực, tự làm mới mỗi 60 giây |
-| Giờ cao điểm hôm nay | Khung giờ có nhiều truy cập nhất |
-| Sinh viên nguy cơ cao | Số em bị đánh dấu ĐỎ |
+| Tổng môn học | Số môn đang diễn ra trong học kỳ, kèm số khoa |
+| SV đăng ký | Lượt ghi danh còn hiệu lực (một SV học 4 môn tính 4 lượt), kèm **số sinh viên khác nhau** |
+| SV tương tác | Lượt ghi danh có ít nhất một hoạt động trong môn, kèm tỷ lệ % |
+| Online hiện tại | Người dùng hoạt động trong 5 phút gần nhất, tự làm mới mỗi 60 giây |
+| Peak hôm nay | Giờ có nhiều truy cập nhất hôm nay |
+| SV nguy cơ cao | Số lượt ghi danh mức ĐỎ, kèm tỷ lệ và **thay đổi so với tuần trước** |
 
-**③ Biểu đồ đường 2 trục** — chọn xem 24 giờ hoặc 7 ngày.
-Trục trái là số request mỗi giờ (**nét liền**), trục phải là số người online (**nét đứt**). Hai kiểu nét khác nhau để không đọc nhầm thang đo. Vùng nền tô đậm là giờ cao điểm.
+Rê chuột lên tên thẻ để xem giải thích; liên kết **Cách tính** mở ngăn nguồn dữ liệu.
 
-**④ Biểu đồ cột chồng theo khoa** — mỗi cột chia hai phần: sinh viên có tương tác và không tương tác.
-**Nhấn vào một cột** để xem danh sách môn của khoa đó.
+**③ Phân bố mức rủi ro + Xu hướng theo thời gian** — biểu đồ tròn Đỏ/Vàng/Xanh đặt cạnh đồ thị 3 đường % theo tuần học
+(hoặc theo ngày). **Nhấn một lát cắt** để tô nổi các khoa có tỷ lệ mức đó cao hơn trung bình toàn trường. Vạch dọc trên đồ
+thị đánh dấu ngày một môn đổi luật cảnh báo.
 
-**⑤ Bảng phân cấp** Khoa ▸ Môn ▸ Sinh viên, có thanh breadcrumb để quay lại cấp trên.
+**④ So sánh giữa các Khoa** — ba biểu đồ cột: quy mô (lượt ghi danh có / không tương tác), tỷ lệ tương tác (đường nét đứt
+là trung bình toàn trường), phân bố mức rủi ro (cột 100%), và bảng tóm tắt cùng số liệu (thứ tự khoa giống nhau ở cả 4).
+**Nhấn cột hoặc dòng** để mở trang Khoa. Hơn 8 khoa thì tự chuyển sang thanh ngang và hiện 10 khoa lớn nhất kèm "Xem tất cả".
 
-**⑥ Heatmap giờ × thứ** của 4 tuần gần nhất. Ô càng đậm thì giờ đó càng đông.
+**⑤ Hoạt động hệ thống** — lưu lượng 2 trục (24 giờ / 7 ngày) và heatmap giờ × thứ của 4 tuần.
 
-> 💡 Mọi biểu đồ đều có nút **"Biểu đồ | Bảng"** để xem cùng số liệu ở dạng bảng — tiện khi cần chép số vào báo cáo.
+> Mọi biểu đồ có nút **"Biểu đồ | Bảng"** để xem cùng số liệu dạng bảng, và liên kết **"Nguồn & cách tính"**.
 
-### 4.3 Xem chi tiết tới từng sinh viên
+### 4.3 Trang Khoa, trang Môn học và tới từng sinh viên
 
-![Drill-down danh sách sinh viên](docs/images/02_admin_drilldown_students.png)
+![Trang khoa](docs/images/report/mh02_cap_khoa.png)
 
-Đường đi ba cấp:
+**Trang Khoa** — KPI của khoa luôn kèm số toàn trường để so sánh; biểu đồ tròn + xu hướng của khoa; **So sánh các môn
+trong khoa** (chọn chỉ số Tỷ lệ tương tác / Nộp bài / Chuyên cần, xếp từ thấp lên cao, đường nét đứt là trung bình khoa;
+môn chưa có dữ liệu ghi "chưa có dữ liệu" thay vì vẽ 0%) và phân bố mức rủi ro theo môn; ô tìm môn, lọc theo bộ môn.
+Bảng môn học có cột **% Nguy cơ cao**, **Luật cảnh báo** (Mặc định / Riêng) và nút **Xem SV**.
 
-```
-Nhấn dòng khoa
-      ↓
-Danh sách 15 môn học  (sắp xếp được theo tỷ lệ tương tác, số SV, số nguy cơ đỏ)
-      ↓  nhấn nút "Xem SV"
-Danh sách sinh viên của môn
-```
+![Trang môn học](docs/images/report/mh02_cap_mon_hoc.png)
 
-Ở cấp sinh viên có thể:
-- Lọc **Có tương tác / Không tương tác**
-- Tìm theo MSSV, họ tên hoặc email
-- Xem lần truy cập cuối cùng và mức rủi ro của từng em
+**Trang Môn học** — ba thẻ Đỏ/Vàng/Xanh kèm thay đổi so với tuần trước, biểu đồ tròn + xu hướng của lớp, hai thẻ:
+*Bảng cảnh báo* (điểm từng tiêu chí, lý do) và *Tất cả sinh viên* (lọc Có / Không tương tác, tìm MSSV, họ tên, email).
+Nhấn một sinh viên để mở cửa sổ chi tiết. Quản trị viên **chỉ xem**: không gửi tin, không đổi luật của môn.
+
+![Nguồn & cách tính](docs/images/report/mh02_nguon_va_cach_tinh.png)
+
+**Nguồn & cách tính** — ngăn bên phải trả lời "số này ở đâu ra": ý nghĩa và công thức chỉ số, **bảng Moodle nguồn**
+(vd `mdl_logstore_standard_log`, `mdl_attendance_log`, `mdl_assign_submission`), bảng phân tích và job ETL, luật 3 tiêu
+chí **đang áp dụng** cho đúng phạm vi (môn có luật riêng thì hiện luật riêng và điểm khác mặc định), đường đi của dữ liệu và
+thời điểm cập nhật. Nội dung đọc từ API – cùng nguồn với ETL, không viết cứng trên giao diện.
 
 ### 4.4 Trang Lưu lượng
 
-![Trang lưu lượng](docs/images/03_admin_traffic.png)
+![Trang lưu lượng](docs/images/report/mh03_luu_luong.png)
 
 | Thành phần | Cách dùng |
 |---|---|
 | Chọn khoảng ngày | Có sẵn mốc nhanh: hôm nay, 7 ngày, 30 ngày, 90 ngày |
-| Thẻ **Online hiện tại** | Tự làm mới mỗi 60 giây |
+| Thẻ **Online hiện tại** | Số người hoạt động trong 5 phút gần nhất, giờ lấy mẫu; tự làm mới mỗi 60 giây |
 | Biểu đồ 2 trục | Requests/giờ và người online |
 | **Top 10 giờ đông nhất** | Cho biết chính xác giờ nào tải cao nhất |
 | Heatmap | Chọn được 1–12 tuần |
 
 ### 4.5 Trang Báo cáo
 
-![Trang báo cáo](docs/images/04_admin_reports_preview.png)
+![Trang báo cáo](docs/images/report/mh04_bao_cao.png)
 
 Quy trình 4 bước:
 
@@ -362,7 +397,7 @@ Quy trình 4 bước:
 
 ### 4.6 Trang Cảnh báo
 
-![Trang cảnh báo](docs/images/05_teacher_risk.png)
+![Trang cảnh báo](docs/images/report/mh09_canh_bao.png)
 
 **Bước 1 — Chọn môn** ở thanh tiêu đề. Danh sách chỉ hiện các môn bạn dạy.
 
@@ -370,44 +405,51 @@ Quy trình 4 bước:
 
 | Mức | Hiển thị | Ý nghĩa |
 |---|---|---|
-| 🔴 | `● Nguy cơ cao` | Cần liên hệ ngay |
-| 🟡 | `▲ Cần lưu ý` | Theo dõi thêm |
-| 🟢 | `✔ An toàn` | Bình thường |
+| Đỏ | `Nguy cơ cao` | Cần liên hệ ngay |
+| Vàng | `Cần lưu ý` | Theo dõi thêm |
+| Xanh | `An toàn` | Bình thường |
 
-> ♿ Mức rủi ro **luôn có biểu tượng và chữ đi kèm**, không bao giờ chỉ dùng màu. Lý do: người mù màu đỏ–lục không phân biệt được hai màu này (độ khác biệt ΔE chỉ 3,5).
+Dưới mỗi thẻ là thay đổi so với tuần trước; bên cạnh là đồ thị **Diễn biến mức rủi ro theo tuần** (tuần 1 tính từ ngày bắt
+đầu môn) cho biết lớp đang tốt lên hay xấu đi.
 
-**Bước 3 — Biểu đồ tròn.** Nhấn một lát cắt hoặc một dòng chú thích để lọc. Bên dưới là số sinh viên theo từng tiêu chí (vắng học / không tương tác / thiếu bài tập) — cũng nhấn để lọc được.
+> Mức rủi ro **luôn có chữ đi kèm màu**, không bao giờ chỉ dùng màu – người mù màu đỏ–lục không phân biệt được hai màu
+> này (ΔE chỉ 3,5). Từ v1.2 bỏ các biểu tượng trang trí (●, ▲, ✔, ⬇…) theo góp ý giảm nhiễu.
+
+**Bước 3 — Biểu đồ tròn.** Nhấn một lát cắt hoặc một dòng chú thích để lọc. Bên dưới là số sinh viên theo từng tiêu chí (vắng học / không tương tác / thiếu bài tập) kèm ngưỡng của luật đang áp dụng — cũng nhấn để lọc được. Dòng cuối khối ghi luật đang dùng: mặc định của trường hay riêng của môn.
 
 **Bước 4 — Bảng cảnh báo.** Mặc định sắp xếp ĐỎ → VÀNG → XANH, trong cùng mức thì điểm cao lên trước. Bảng có:
 - Ô tìm kiếm theo MSSV / họ tên
 - Bộ lọc theo mức và theo tiêu chí
 - Sắp xếp theo từng cột
-- Nút xuất danh sách ra Excel / PDF
+- Cột điểm từng tiêu chí (C1, C2, C3) và chú giải công thức điểm
+- Nút **Xuất danh sách** ra Excel / PDF
 
-**Bước 5 — Nhấn "Chi tiết"** ở mỗi dòng để mở cửa sổ chi tiết.
+**Bước 5 — Nhấn vào một dòng** để mở cửa sổ chi tiết (đường dẫn có `?student=…`, F5 mở lại đúng sinh viên).
 
 ### 4.7 Cửa sổ chi tiết sinh viên
 
-![Cửa sổ chi tiết sinh viên](docs/images/06_teacher_student_modal.png)
+![Cửa sổ chi tiết sinh viên](docs/images/report/mh10_chi_tiet_sinh_vien.png)
 
 Cửa sổ này trả lời câu hỏi **"vì sao em này bị đánh dấu đỏ?"**
 
 | Thành phần | Nội dung |
 |---|---|
 | **Dòng Lý do** | Viết bằng câu chữ rõ ràng: *"Vắng 9/18 buổi (50%) · Chưa từng truy cập môn học · Thiếu 3/3 bài tập"* |
+| **Phân tích điểm rủi ro** | Từng tiêu chí: số liệu thực tế → so với ngưỡng → 0/1/2 điểm → nhân trọng số → đóng góp; tổng; luật nào xếp em vào mức này |
 | **Biểu đồ so sánh** | Đối chiếu sinh viên này với trung bình lớp |
 | **Biểu đồ hoạt động theo tuần** | Chấm tròn **đặc** = tuần đi học đủ, chấm **rỗng** = tuần có buổi vắng |
 | **Danh sách bài tập** | Trạng thái đúng hạn / trễ hạn / thiếu / chưa tới hạn |
 | **Lịch sử cảnh báo** | Mức rủi ro thay đổi qua các tuần |
 | **Can thiệp trước đây** | Những lần giảng viên đã liên hệ |
 
-**Bốn nút hành động** ở cuối cửa sổ: Gửi tin nhắn Moodle · Email · Ghi chú · Hẹn gặp.
+**Bốn nút hành động** ở cuối cửa sổ: **Gửi tin nhắn Moodle** · **Gửi email** (mở trình soạn tin có sẵn số liệu của em,
+gửi thật qua kênh đã cấu hình, xem mục 4.12) · **Ghi chú** · **Hẹn gặp**.
 
 Mỗi hành động được ghi vào nhật ký can thiệp kèm mức rủi ro tại thời điểm đó, để sau này biết đã làm gì và kết quả ra sao.
 
 ### 4.8 Trang Tiến độ lớp
 
-![Trang tiến độ lớp](docs/images/07_teacher_progress.png)
+![Trang tiến độ lớp](docs/images/report/mh11_tien_do_lop.png)
 
 | Thành phần | Cho biết điều gì |
 |---|---|
@@ -418,7 +460,7 @@ Mỗi hành động được ghi vào nhật ký can thiệp kèm mức rủi ro
 
 ### 4.9 Dùng trên điện thoại
 
-![Giao diện trên điện thoại](docs/images/08_mobile_teacher_risk.png)
+![Giao diện trên điện thoại](docs/images/report/mh09_dien_thoai.png)
 
 Giao diện dùng được từ màn hình rộng 390 px trở lên: các thẻ xếp dọc, bảng cuộn ngang trong khung riêng, trang không bao giờ bị cuộn ngang.
 
@@ -429,7 +471,54 @@ Giao diện dùng được từ màn hình rộng 390 px trở lên: các thẻ 
 | **"Chưa có dữ liệu"** | Khác hẳn "0%". Ví dụ môn chưa có buổi điểm danh nào thì tỷ lệ chuyên cần là "chưa có dữ liệu", không phải "vắng 0%" |
 | **"Cập nhật lúc…"** trên header | Thời điểm ETL chạy lần cuối, không phải giờ hiện tại của máy bạn |
 | **Nút "Biểu đồ \| Bảng"** | Mọi biểu đồ đều xem được ở dạng bảng số liệu |
-| **Màu luôn kèm ký hiệu** | `●` `▲` `✔` — bảo đảm người mù màu vẫn đọc được |
+| **Màu luôn kèm chữ** | "Nguy cơ cao / Cần lưu ý / An toàn" — bảo đảm người mù màu vẫn đọc được |
+| **"Nguồn & cách tính"** | Liên kết trên mọi biểu đồ: bảng Moodle nguồn, công thức, luật đang áp dụng, độ mới số liệu |
+| **"Luật riêng"** | Môn có luật cảnh báo do giảng viên đặt; số Đỏ/Vàng/Xanh của môn đó chấm theo luật riêng |
+
+### 4.11 Thiết lập cảnh báo (giảng viên)
+
+![Thiết lập cảnh báo](docs/images/report/mh14_thiet_lap_canh_bao.png)
+
+Menu **Thiết lập cảnh báo** – đặt luật cảnh báo riêng cho môn đang chọn:
+
+1. Chọn **mẫu** theo loại môn: Mặc định của trường · Lý thuyết · Thực hành · Đồ án, hoặc chỉnh tay (thành "Tùy chỉnh").
+2. Chỉnh **ngưỡng** 3 tiêu chí và **trọng số** (mỗi trọng số 10–60%, tổng 100%); thêm tối đa 5 **luật bổ sung**, ví dụ
+   *"Bỏ nộp 2 bài liên tiếp → Nguy cơ cao"*, *"Vắng 2 buổi của hoạt động Điểm danh thực hành → Nguy cơ cao"*,
+   *"Vắng từ 25% → Nguy cơ cao"*. Luật bổ sung chỉ **nâng** mức, không hạ.
+3. Khối **Tác động nếu áp dụng** cho biết ngay bao nhiêu sinh viên đổi mức và đổi vì luật nào – **trước khi lưu**.
+4. **Lưu và áp dụng** (ghi lý do) tạo phiên bản mới và áp dụng ngay cho số liệu hôm nay; các ngày trước giữ luật cũ.
+   **Khôi phục mặc định** quay về luật của trường. Lịch sử phiên bản luôn giữ đủ.
+
+Giá trị ngoài giới hạn an toàn bị báo lỗi ngay và không lưu được. Chỉ **giảng viên chính** (vai trò editingteacher trong
+Moodle) được lưu; trợ giảng xem và xem trước. Luật xếp mức chung của trường không đổi để mức rủi ro so sánh được giữa các môn.
+
+### 4.12 Can thiệp – gửi tin và nhắc tự động (giảng viên)
+
+![Can thiệp](docs/images/report/mh15_can_thiep_can_lien_he.png)
+
+Menu **Can thiệp** có 4 thẻ:
+
+| Thẻ | Dùng để |
+|---|---|
+| **Cần liên hệ** | Sinh viên Đỏ/Vàng chưa được liên hệ trong 3/7/14 ngày, lý do chính, lần liên hệ gần nhất. Chọn nhiều em → **Soạn tin** |
+| **Đã gửi** | Trạng thái từng tin (chờ duyệt, chờ gửi, đã gửi, lỗi, đã hủy) và **mã xác nhận**: mã tin trong `mdl_messages` hoặc Message-ID email. Duyệt / hủy / gửi lại; liên kết **Xem như sinh viên** mở hộp tin của em |
+| **Nhắc tự động** | Quy tắc: không truy cập quá n ngày · vừa chuyển sang Nguy cơ cao · quá hạn nộp bài. Tự gửi hoặc chờ duyệt, thời gian chờ giữa hai lần nhắc; **Chạy thử** xem ai sẽ nhận mà không gửi |
+| **Mẫu tin nhắn** | 4 mẫu hệ thống và mẫu riêng; biến như `{ten_sv}`, `{so_buoi_vang}`, `{bai_chua_nop}`, `{tinh_hinh}` được điền từ số liệu cảnh báo mới nhất |
+
+Trình soạn tin hiện **từng bản xem trước cho từng sinh viên** (sửa được) và một dải thông báo nói rõ chế độ gửi hiện hành.
+Không gửi tự động trong 22:00–06:00 (tin tạo trong khung này được hẹn gửi 07:00).
+
+> 🔒 **Chốt chặn gửi thật.** Tin chỉ tới sinh viên thật khi đủ 3 điều kiện: `MESSAGING_ALLOW_LIVE=true`, hệ thống chạy dữ
+> liệu thật (`LMS_AS_OF` để trống) và kênh đã được kiểm tra thành công ở trang Kênh gửi tin. Với dữ liệu demo, email luôn
+> ghi file `.eml` (hoặc chuyển hướng về hộp thư kiểm thử) và tin nhắn Moodle đi tới máy chủ mô phỏng.
+
+### 4.13 Kênh gửi tin (quản trị viên)
+
+![Kênh gửi tin](docs/images/report/mh16_kenh_gui_tin.png)
+
+**Hệ thống › Kênh gửi tin**: cấu hình hiện hành (mật khẩu, token luôn che), chế độ hiệu lực của từng kênh, nút
+**Kiểm tra Moodle** (gọi `core_webservice_get_site_info`) và **Gửi email thử**, thống kê gửi 30 ngày. Cách cấu hình với
+Moodle và máy chủ thư của trường: [docs/TAI_LIEU_HE_THONG.md](docs/TAI_LIEU_HE_THONG.md) mục 8.11 và kế hoạch v1.2 mục 5.10.
 
 ---
 
@@ -442,24 +531,46 @@ Mật khẩu mặc định của **tất cả** tài khoản: `Lms@2026demo`
 
 | Tên hiển thị | Username | Vai trò | Xem được gì |
 |---|---|---|---|
-| Quản trị Hệ thống | `admin` | ADMIN | Tổng quan · Lưu lượng · Báo cáo |
+| Quản trị Hệ thống | `admin` | ADMIN | Tổng quan (Toàn trường › Khoa › Môn) · Lưu lượng · Báo cáo · Danh mục · Hệ thống (gồm Kênh gửi tin) |
 
 ### Giảng viên
 
-| Tên hiển thị | Username | Môn phụ trách | Số SV |
-|---|---|---|---:|
-| Trần Minh Hùng | `gv.tranminhhung` | IT001 Nhập môn lập trình · IT002 Toán rời rạc | 287 |
-| Nguyễn Thị Lan | `gv.nguyenthilan` | IT003 Cấu trúc dữ liệu và giải thuật · IT010 Trí tuệ nhân tạo | 270 |
-| Lê Quốc Bảo | `gv.lequocbao` | IT004 Cơ sở dữ liệu · IT005 Hệ quản trị cơ sở dữ liệu | 304 |
-| Phạm Thu Hà | `gv.phamthuha` | IT006 Phân tích thiết kế HTTT · IT011 Kho dữ liệu và khai phá dữ liệu | 326 |
-| Võ Thanh Tâm | `gv.vothanhtam` | IT007 Lập trình hướng đối tượng · IT008 Công nghệ phần mềm | 250 |
-| Đặng Ngọc Ánh | `gv.dangngocanh` | IT009 Lập trình Web · IT012 Kiểm thử phần mềm | 253 |
-| **Bùi Đức Thắng** ⭐ | `gv.buiducthang` | IT004 Cơ sở dữ liệu · IT013 Mạng máy tính · IT014 Hệ điều hành | **315** |
-| **Hồ Hải Yến** ⭐ | `gv.hohaiyen` | IT001 Nhập môn lập trình · IT009 Lập trình Web · IT015 An toàn thông tin | **350** |
+28 giảng viên của 5 khoa. "(trợ giảng)" = vai trò `teacher` trong Moodle: xem và xem trước luật cảnh báo nhưng không
+lưu được; các môn còn lại là giảng viên chính (`editingteacher`). Số SV = tổng lượt ghi danh các môn phụ trách.
 
-⭐ = dạy 3 môn, nhiều dữ liệu nhất — nên dùng để demo.
+| Khoa | Tên hiển thị | Username | Môn phụ trách | Số SV |
+|---|---|---|---|---:|
+| Công nghệ Thông tin | Trần Minh Hùng | `gv.tranminhhung` | IT001 · IT002 | 385 |
+| Công nghệ Thông tin | Nguyễn Thị Lan | `gv.nguyenthilan` | IT003 · IT010 | 299 |
+| Công nghệ Thông tin | Lê Quốc Bảo | `gv.lequocbao` | IT004 · IT005 | 266 |
+| Công nghệ Thông tin | Phạm Thu Hà | `gv.phamthuha` | IT006 · IT011 | 379 |
+| Công nghệ Thông tin | Võ Thanh Tâm | `gv.vothanhtam` | IT007 · IT008 | 277 |
+| Công nghệ Thông tin | Đặng Ngọc Ánh | `gv.dangngocanh` | IT009 · IT012 | 361 |
+| Công nghệ Thông tin | Bùi Đức Thắng | `gv.buiducthang` | IT004 (trợ giảng) · IT013 · IT014 | 377 |
+| Công nghệ Thông tin | Hồ Hải Yến | `gv.hohaiyen` | IT001 (trợ giảng) · IT009 (trợ giảng) · IT015 | 571 |
+| Kinh tế – Quản trị kinh doanh | Nguyễn Văn Khánh | `gv.nguyenvankhanh` | KT106 · KT107 · KT112 | 880 |
+| Kinh tế – Quản trị kinh doanh | Trần Thị Mỹ | `gv.tranthimy` | KT108 · KT109 · KT110 | 842 |
+| Kinh tế – Quản trị kinh doanh | Lê Hoàng Nam | `gv.lehoangnam` | KT101 · KT111 | 512 |
+| Kinh tế – Quản trị kinh doanh | Phạm Ngọc Quỳnh | `gv.phamngocquynh` | KT103 · KT104 | 632 |
+| Kinh tế – Quản trị kinh doanh | Đoàn Minh Trí | `gv.doanminhtri` | KT102 · KT105 · KT110 (trợ giảng) | 748 |
+| Ngoại ngữ | Nguyễn Thùy Trang | `gv.nguyenthuytrang` | NN101_N01 · NN202 · NN207 | 657 |
+| Ngoại ngữ | Lê Thanh Thảo | `gv.lethanhthao` | NN101_N02 · NN203 · NN208 | 701 |
+| Ngoại ngữ | Hoàng Diệu Linh | `gv.hoangdieulinh` | NN101_N03 · NN204 | 468 |
+| Ngoại ngữ | Trần Quốc Việt | `gv.tranquocviet` | NN101_N04 · NN205 | 496 |
+| Ngoại ngữ | Võ Thu Hương | `gv.vothuhuong` | NN201 · NN203 (trợ giảng) · NN206 | 767 |
+| Luật | Phạm Văn Thắng | `gv.phamvanthang` | LU103 · LU106 | 435 |
+| Luật | Nguyễn Thị Hoa | `gv.nguyenthihoa` | LU107 · LU109 | 364 |
+| Luật | Đặng Quang Huy | `gv.dangquanghuy` | LU105 · LU108 | 557 |
+| Luật | Bùi Ngọc Mai | `gv.buingocmai` | LU101 · LU102 | 415 |
+| Luật | Lê Đình Khôi | `gv.ledinhkhoi` | LU104 · LU108 (trợ giảng) · LU110 | 607 |
+| Sinh học | Huỳnh Thanh Sơn | `gv.huynhthanhson` | SH101 · SH102 | 434 |
+| Sinh học | Nguyễn Kim Ngân | `gv.nguyenkimngan` | SH104 · SH107 | 431 |
+| Sinh học | Trần Văn Lộc | `gv.tranvanloc` | SH106 · SH109 | 474 |
+| Sinh học | Phan Thị Yến | `gv.phanthiyen` | SH103 · SH105 | 396 |
+| Sinh học | Ngô Quang Trường | `gv.ngoquangtruong` | SH102 (trợ giảng) · SH108 | 389 |
 
-Tất cả đều thuộc **Khoa Công nghệ Thông tin**. Dữ liệu giả lập chỉ mô phỏng 1 khoa với 4 bộ môn và 15 môn học.
+Tài khoản nên dùng để demo: `gv.hohaiyen` (3 môn, nhiều dữ liệu nhất của CNTT), `gv.nguyenthilan` (giảng viên chính cả 2
+môn – thử được đầy đủ Thiết lập cảnh báo và Can thiệp), hoặc bất kỳ giảng viên khoa khác để so sánh.
 
 ### Đổi mật khẩu
 
@@ -485,8 +596,8 @@ Sau khi `git clone`, hệ thống **chưa chạy được ngay**. Sáu thứ dư
 | **`.env`** | vài KB | Chứa mật khẩu và khóa JWT — đưa lên Git là lộ bí mật | `Copy-Item .env.example .env` rồi điền (mục 3.2) |
 | **`docker/.env`** | vài KB | Như trên | `Copy-Item docker/.env.example docker/.env` |
 | **`frontend/node_modules`** | **160 MB** | Thư viện tải về, `package-lock.json` đã ghi đủ phiên bản | `cd frontend && npm install` |
-| **CSDL `moodle_src`** | **507 MB** | Nằm trong PostgreSQL, không nằm trong thư mục dự án | `lms.ps1 seed` + `lms.ps1 mock` |
-| **CSDL `lms_analytics`** | **322 MB** | Như trên | `lms.ps1 setup` + `lms.ps1 etl-backfill` |
+| **CSDL `moodle_src`** | **2,6 GB** | Nằm trong PostgreSQL, không nằm trong thư mục dự án | `lms.ps1 seed` + `lms.ps1 mock` |
+| **CSDL `lms_analytics`** | **1,25 GB** | Như trên | `lms.ps1 setup` + `lms.ps1 etl-backfill` |
 | **`frontend/dist`** | 1,5 MB | Bản build, sinh ra từ mã nguồn | `npm run build` |
 
 Nhờ vậy repo chỉ nặng khoảng **7 MB** thay vì gần 1 GB.
@@ -517,7 +628,7 @@ Ra số khác nghĩa là `LMS_AS_OF` trong `.env` chưa đúng.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│ ① NGUỒN — moodle_src (507 MB, 26 bảng mdl_*)                   │
+│ ① NGUỒN — moodle_src (2,6 GB, 30 bảng mdl_*)                   │
 │   mdl_logstore_standard_log ....... 1.215.209 dòng             │
 │   mdl_attendance_log .............. 36.933 dòng                │
 │   mdl_assign_submission ........... 7.272 dòng                 │
@@ -532,10 +643,11 @@ Ra số khác nghĩa là `LMS_AS_OF` trong `.env` chưa đúng.
                  └──────────┬───────────┘
                             │
 ┌───────────────────────────▼────────────────────────────────────┐
-│ ③ KHO PHÂN TÍCH — lms_analytics (322 MB)                       │
-│   fact_student_risk_summary ... 145.702 dòng  ✅ đã chấm điểm  │
-│   fact_course_progress_daily ..     915 dòng  ✅ đã gộp        │
-│   fact_server_traffic_hourly ..   1.451 dòng  ✅ đã đếm        │
+│ ③ KHO PHÂN TÍCH — lms_analytics (1,25 GB)                      │
+│   fact_student_risk_summary ... 770.314 dòng  ✅ đã chấm điểm  │
+│   fact_course_progress_daily ..   3.538 dòng  ✅ đã gộp        │
+│   fact_server_traffic_hourly ..   1.450 dòng  ✅ đã đếm        │
+│   risk_rule_set · outbound_message · auto_prompt_rule (v1.2)   │
 └───────────────────────────┬────────────────────────────────────┘
                             │
                  ┌──────────▼───────────┐
@@ -554,7 +666,7 @@ Ra số khác nghĩa là `LMS_AS_OF` trong `.env` chưa đúng.
 
 | Vấn đề khi truy vấn thẳng Moodle | Giải pháp của dự án |
 |---|---|
-| Phải JOIN 12 bảng, quét 1,2 triệu dòng log → mất **vài phút** | Tính trước, lưu sẵn vào bảng fact → còn **dưới 40 ms** |
+| Phải JOIN 12 bảng, quét 6,4 triệu dòng log → mất **vài phút** | Tính trước, lưu sẵn vào bảng fact → mỗi câu SQL **dưới 10 ms** |
 | Chạy truy vấn nặng làm chậm Moodle mà sinh viên đang dùng thật | ETL kết nối **read-only** có timeout, chạy lúc rảnh |
 | Moodle không có khái niệm "học kỳ", "mức rủi ro" | ETL tự suy ra và lưu vào bảng fact |
 
@@ -639,8 +751,8 @@ Mỗi job dùng `pg_try_advisory_lock` để không chạy chồng lên nhau, v�
 |---|---|---|
 | Vai trò | **Nguồn** — mô phỏng Moodle thật | **Đích** — kho phân tích |
 | Schema | `public` | `analytics` |
-| Số bảng | 26 (`mdl_*`) | 8 |
-| Dung lượng | 507 MB | 322 MB |
+| Số bảng | 30 (`mdl_*`) | 14 |
+| Dung lượng | 2,6 GB | 1,25 GB |
 | Ai ghi vào | `mockdata/` | `etl/` |
 | Ai đọc | `etl/` (chỉ đọc) | `backend/` |
 
@@ -849,11 +961,11 @@ Do_an_chuyen_nganh/
 
 | File | Tác dụng |
 |---|---|
-| `config.py` | Tham số sinh dữ liệu: `RANDOM_SEED = 2026`, 15 môn, 500 SV, các hồ sơ hành vi (chăm / trung bình / lười), trọng số theo giờ và thứ |
+| `config.py` | Tham số sinh dữ liệu: `RANDOM_SEED = 2026`, danh sách `FACULTIES` (5 khoa: bộ môn, môn và loại môn LT/TH/ĐA, số SV, giảng viên, tỷ lệ hồ sơ hành vi, hệ số truy cập), lớp Tiếng Anh dùng chung, tài khoản dịch vụ gửi tin, trọng số theo giờ và thứ |
 | `db.py` | Kết nối `moodle_src`, dùng `COPY` ghi hàng loạt |
 | `names.py` | Sinh họ tên tiếng Việt có tính tái lập |
-| `seed_structure.py` | Dựng bộ khung: vai trò, cây Khoa→Bộ môn→Môn, 8 giảng viên, 500 SV, ghi danh, bài tập, buổi điểm danh |
-| `generate_activity.py` | Sinh hành vi học tập: 1,2 triệu dòng log, 7.272 bài nộp, 36.933 lượt điểm danh |
+| `seed_structure.py` | Dựng bộ khung: vai trò, cây Khoa→Bộ môn→Môn, 28 giảng viên, 3.000 SV (khoa ở `mdl_user.department`), ghi danh, bài tập và hoạt động điểm danh theo loại môn, tùy chọn nhận tin `mdl_user_preferences` |
+| `generate_activity.py` | Sinh hành vi học tập: 6,4 triệu dòng log, 48.144 bài nộp, 180.786 lượt điểm danh (~7 phút) |
 | `cleanup.py` | Xóa dữ liệu giả lập (`--activity` hoặc `--all`) |
 
 ### 9.5 `etl/` — ③ Tầng ETL
@@ -928,7 +1040,7 @@ Do_an_chuyen_nganh/
 | File | Tác dụng |
 |---|---|
 | `app/main.py` | Điểm khởi động: tạo FastAPI app, gắn CORS, security header, đăng ký 5 router với tiền tố `/api/v1` |
-| `app/cli.py` | Quản lý tài khoản: `sync-users`, `set-password`, `list-users` |
+| `app/cli.py` | Quản lý tài khoản: `sync-users`, `set-password`, `list-users`; sao lưu: `backup`, `list-backups`, `restore` |
 | `app/core/config.py` | Đọc biến `BACKEND_*` từ `.env` + `AS_OF` |
 | `app/core/db.py` | Connection pool (`pool_size=10`), dependency `get_conn` |
 | `app/core/security.py` | ⭐ Băm bcrypt, ký/kiểm JWT HS256 (hạn 8 giờ), `require_role`, giới hạn đăng nhập sai |
@@ -1088,12 +1200,13 @@ Do_an_chuyen_nganh/
 
 | Loại | Lệnh | Tiền điều kiện |
 |---|---|---|
-| CSDL, ETL, mock, tích hợp, API | `python -m pytest -q` | Đã chạy `etl-backfill` |
+| CSDL, ETL, mock, tích hợp, API, gửi tin, sao lưu | `python -m pytest -q` | Đã chạy `etl-backfill`, `users` |
 | Frontend (đơn vị) | `cd frontend; npm test` | — |
-| E2E, phân quyền, responsive, WCAG | `cd frontend; npx playwright test` | API + web đang chạy, đặt `LMS_DEMO_PASSWORD` |
+| E2E, phân quyền, responsive, WCAG | `cd frontend; npx playwright test` | API + web + `moodle-stub` đang chạy, đặt `LMS_DEMO_PASSWORD` (tùy chọn `E2E_TEACHER`, `E2E_JWT_SECRET`); dọn dữ liệu thử tự động sau khi chạy |
 | Hiệu năng | `.\scripts\lms.ps1 bench` | Xem thêm [perf/README.md](perf/README.md) |
 
-Kết quả đã đo được ghi ở [docs/KET_QUA_KIEM_THU.md](docs/KET_QUA_KIEM_THU.md). Tóm tắt: **p99 của mọi endpoint đọc dữ liệu đều dưới 40 ms**.
+Kết quả đã đo được ghi ở [docs/KET_QUA_KIEM_THU.md](docs/KET_QUA_KIEM_THU.md). Tóm tắt v1.2 (dữ liệu 5 khoa): mọi kiểm thử
+pytest, vitest, 57 E2E đều đạt; 94 câu SQL của Dashboard chậm nhất 8,9 ms; 50 người dùng đồng thời: p95 28 ms, p99 50 ms, 0 lỗi.
 
 ---
 
@@ -1110,6 +1223,8 @@ Kết quả đã đo được ghi ở [docs/KET_QUA_KIEM_THU.md](docs/KET_QUA_KI
 | Đổi mật khẩu xong vẫn không vào được | Đổi nhầm CSDL | Bản local (cổng 5173) và Docker (cổng 8080) dùng **hai CSDL riêng** |
 | `npm run dev` báo thiếu module | Chưa `npm install` | `cd frontend; npm install` |
 | Biểu đồ trống nhưng bảng có số | Trình duyệt chặn canvas | Thử trình duyệt khác, hoặc bấm nút "Bảng" |
+| Gửi tin nhắn Moodle báo "Moodle lỗi máy chủ" / không kết nối được | Chưa chạy máy chủ Moodle mô phỏng | `.\scripts\lms.ps1 moodle-stub` (cổng 8091); kiểm tra ở Hệ thống › Kênh gửi tin |
+| Không thấy email đã gửi | Chế độ mặc định ghi file, không gửi ra ngoài | Mở thư mục `var/mail_outbox/` (file `.eml`) |
 
 ---
 

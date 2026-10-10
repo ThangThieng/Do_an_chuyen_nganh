@@ -1,10 +1,12 @@
 """
 Dựng CẤU TRÚC Moodle giả lập trong moodle_src (SPEC Phần 3.1 – dòng "Cây Khoa → Môn", "Người dùng, ghi danh").
 
-Tạo: vai trò, loại hoạt động, Khoa CNTT + 4 bộ môn, 15 môn học, 8 giảng viên, 500 sinh viên,
-ghi danh, phân vai trò, chương/tuần, trang bài giảng, diễn đàn, bài tập, hoạt động điểm danh,
-buổi học, trạng thái điểm danh, nhóm – kèm các ca biên (SV bị khóa/xóa, ghi danh bị dừng/hết hạn,
-bài nộp nhóm, buổi học theo nhóm, môn chưa có buổi điểm danh).
+Tạo (theo mockdata/config.py): vai trò, loại hoạt động, 5 khoa với các bộ môn, 58 môn học (lý thuyết / thực hành /
+đồ án), 28 giảng viên, ~3.000 sinh viên thuộc từng khoa (mdl_user.department), tài khoản dịch vụ gửi tin nhắn,
+ghi danh (kể cả lớp Tiếng Anh 1 học chung nhiều khoa), phân vai trò, chương/tuần, trang bài giảng, diễn đàn,
+bài tập và hoạt động điểm danh theo loại môn, buổi học, trạng thái điểm danh, nhóm, tùy chọn nhận tin –
+kèm các ca biên (SV bị khóa/xóa, ghi danh bị dừng/hết hạn, bài nộp nhóm, buổi thực hành theo nhóm,
+môn chưa có buổi điểm danh, SV chỉ nhận tin từ liên hệ).
 
 Hành vi (log, bài nộp, điểm danh...) do generate_activity.py sinh ở bước sau.
 
@@ -23,8 +25,8 @@ from datetime import timedelta
 import numpy as np
 
 from mockdata import config as cfg
-from mockdata.db import (ACTIVITY_TABLES, STRUCTURE_TABLES, analyze_tables, connect, copy_rows, count_rows,
-                         sync_sequence, truncate)
+from mockdata.db import (ACTIVITY_TABLES, MESSAGE_TABLES, STRUCTURE_TABLES, analyze_tables, connect, copy_rows,
+                         count_rows, sync_sequence, truncate)
 from mockdata.names import vietnamese_names
 
 CONTEXT_SYSTEM, CONTEXT_CATEGORY, CONTEXT_COURSE, CONTEXT_MODULE = 10, 40, 50, 70
@@ -75,55 +77,86 @@ def build_structure(rng: np.random.Generator) -> Tables:
         return ctx_id, path
 
     # ------------------------------------------------------------------ người dùng
-    def add_user(username, lastname, firstname, email, idnumber="", suspended=0, deleted=0) -> int:
+    def add_user(username, lastname, firstname, email, idnumber="", suspended=0, deleted=0, department="") -> int:
         return t.add("mdl_user", auth="manual", confirmed=1, mnethostid=1, username=username,
                      password="!mock-not-a-hash!", idnumber=idnumber, firstname=firstname, lastname=lastname,
-                     email=email, lang="vi", timezone="Asia/Ho_Chi_Minh", city="Đà Lạt", country="VN",
+                     email=email, institution=cfg.INSTITUTION if department else "", department=department,
+                     lang="vi", timezone="Asia/Ho_Chi_Minh", city="Đà Lạt", country="VN",
                      suspended=suspended, deleted=deleted, timecreated=created, timemodified=created)
 
     add_user("guest", "Khách", "Người dùng", "")
     add_user("admin", "Quản trị", "Hệ thống", f"admin@{cfg.STAFF_EMAIL_DOMAIN}")
-    teacher_ids = [add_user(u, last, first, f"{u.removeprefix('gv.')}@{cfg.STAFF_EMAIL_DOMAIN}", idnumber=f"CB{i + 1:04d}")
-                   for i, (u, last, first) in enumerate(cfg.TEACHERS)]
+    # Giảng viên tạo trước tài khoản dịch vụ để giảng viên Khoa CNTT giữ đúng id của bộ dữ liệu 1 khoa
+    # (app_user.user_id = mdl_user.id – tài khoản đăng nhập demo không phải tạo lại)
+    teacher_ids: dict[str, list[int]] = {}
+    staff_no = 0
+    for fac in cfg.FACULTIES:
+        teacher_ids[fac["code"]] = []
+        for username, last, first in fac["teachers"]:
+            staff_no += 1
+            teacher_ids[fac["code"]].append(add_user(
+                username, last, first, f"{username.removeprefix('gv.')}@{cfg.STAFF_EMAIL_DOMAIN}",
+                idnumber=f"CB{staff_no:04d}", department=fac["name"]))
 
+    svc = cfg.SERVICE_ACCOUNT
+    add_user(svc["username"], svc["lastname"], svc["firstname"], svc["email"], idnumber=svc["idnumber"],
+             department=svc["department"])
+
+    # Sinh viên theo khoa: MSSV = 22 + chữ số khoa + 2 + STT 3 chữ số (CNTT giữ dải 2212001… của bộ dữ liệu cũ)
     student_names = vietnamese_names(rng, cfg.N_STUDENTS)
     special = rng.choice(cfg.N_STUDENTS, size=cfg.SUSPENDED_STUDENTS + cfg.DELETED_STUDENTS, replace=False)
     suspended_idx = set(special[:cfg.SUSPENDED_STUDENTS].tolist())
     deleted_idx = set(special[cfg.SUSPENDED_STUDENTS:].tolist())
-    student_ids = []
-    for i, (lastname, firstname) in enumerate(student_names):
-        code = str(cfg.STUDENT_CODE_START + i)
-        student_ids.append(add_user(code, lastname, firstname, f"{code}@{cfg.STUDENT_EMAIL_DOMAIN}", idnumber=code,
-                                    suspended=int(i in suspended_idx), deleted=int(i in deleted_idx)))
+    students_of: dict[str, list[int]] = {}
+    inactive_users: set[int] = set()
+    i = 0
+    for fac in cfg.FACULTIES:
+        students_of[fac["code"]] = []
+        for seq in range(1, fac["students"] + 1):
+            lastname, firstname = student_names[i]
+            code = f"{cfg.STUDENT_CODE_PREFIX}{fac['digit']}2{seq:03d}"
+            uid = add_user(code, lastname, firstname, f"{code}@{cfg.STUDENT_EMAIL_DOMAIN}", idnumber=code,
+                           suspended=int(i in suspended_idx), deleted=int(i in deleted_idx), department=fac["name"])
+            students_of[fac["code"]].append(uid)
+            if i in suspended_idx or i in deleted_idx:
+                inactive_users.add(uid)
+            i += 1
+    all_students = [u for f in cfg.FACULTIES for u in students_of[f["code"]]]
 
-    # ------------------------------------------------------------------ danh mục: Khoa (cấp 1) > Bộ môn (cấp 2)
-    fac_code, fac_name = cfg.FACULTY
-    faculty_id = len(t.rows.get("mdl_course_categories", [])) + 1
-    t.add("mdl_course_categories", id=faculty_id, name=fac_name, idnumber=fac_code, parent=0, sortorder=10000,
-          depth=1, path=f"/{faculty_id}", timemodified=created)
-    _, faculty_ctx_path = add_context(CONTEXT_CATEGORY, faculty_id, "/1")
+    # Tùy chọn nhận tin: một số ít sinh viên chỉ nhận tin từ liên hệ (message_blocknoncontacts = 0)
+    only_contacts = rng.choice(all_students, size=max(1, int(len(all_students) * cfg.ONLY_CONTACTS_RATE)), replace=False)
+    for uid in sorted(int(u) for u in only_contacts):
+        t.add("mdl_user_preferences", userid=uid, name="message_blocknoncontacts", value="0")
 
     # site course (id = 1) như Moodle thật
     t.add("mdl_course", id=1, category=0, fullname="Hệ thống LMS – Trường Đại học Đà Lạt", shortname="DLU-LMS",
           format="site", startdate=0, enddate=0, visible=1, timecreated=created, timemodified=created)
     add_context(CONTEXT_COURSE, 1, "/1")
 
+    # ------------------------------------------------------------------ danh mục: Khoa (cấp 1) > Bộ môn (cấp 2), môn học
     start, end = ts(cfg.SEMESTER_START), ts(cfg.SEMESTER_END)
     courses: list[dict] = []
-    for d_order, (dept_code, dept_name, dept_courses) in enumerate(cfg.DEPARTMENTS, start=1):
-        dept_id = len(t.rows["mdl_course_categories"]) + 1
-        t.add("mdl_course_categories", id=dept_id, name=dept_name, idnumber=f"{fac_code}-{dept_code}",
-              parent=faculty_id, sortorder=10000 + d_order * 10, depth=2, path=f"/{faculty_id}/{dept_id}",
-              coursecount=len(dept_courses), timemodified=created)
-        _, dept_ctx_path = add_context(CONTEXT_CATEGORY, dept_id, faculty_ctx_path)
-        for shortname, fullname in dept_courses:
-            course_id = t.add("mdl_course", category=dept_id, sortorder=len(t.rows["mdl_course"]) * 10,
-                              fullname=fullname, shortname=shortname, idnumber=f"{shortname}_{cfg.ACADEMIC_TERM_TAG}",
-                              summary=f"Học phần {fullname} – {cfg.ACADEMIC_TERM_TAG}", format="weeks",
-                              startdate=start, enddate=end, visible=1, enablecompletion=1, lang="vi",
-                              timecreated=created, timemodified=created)
-            ctx_id, ctx_path = add_context(CONTEXT_COURSE, course_id, dept_ctx_path)
-            courses.append(dict(id=course_id, shortname=shortname, fullname=fullname, ctx_id=ctx_id, ctx_path=ctx_path))
+    for f_order, fac in enumerate(cfg.FACULTIES, start=1):
+        faculty_id = len(t.rows.get("mdl_course_categories", [])) + 1
+        t.add("mdl_course_categories", id=faculty_id, name=fac["name"], idnumber=fac["code"], parent=0,
+              sortorder=f_order * 10000, depth=1, path=f"/{faculty_id}", timemodified=created)
+        _, faculty_ctx_path = add_context(CONTEXT_CATEGORY, faculty_id, "/1")
+        for d_order, (dept_code, dept_name, dept_courses) in enumerate(fac["departments"], start=1):
+            dept_id = len(t.rows["mdl_course_categories"]) + 1
+            t.add("mdl_course_categories", id=dept_id, name=dept_name, idnumber=f"{fac['code']}-{dept_code}",
+                  parent=faculty_id, sortorder=f_order * 10000 + d_order * 10, depth=2,
+                  path=f"/{faculty_id}/{dept_id}", coursecount=len(dept_courses), timemodified=created)
+            _, dept_ctx_path = add_context(CONTEXT_CATEGORY, dept_id, faculty_ctx_path)
+            for shortname, fullname, kind in dept_courses:
+                course_id = t.add("mdl_course", category=dept_id, sortorder=len(t.rows["mdl_course"]) * 10,
+                                  fullname=fullname, shortname=shortname,
+                                  idnumber=f"{shortname}_{cfg.ACADEMIC_TERM_TAG}",
+                                  summary=f"Học phần {fullname} – {cfg.ACADEMIC_TERM_TAG}", format="weeks",
+                                  startdate=start, enddate=end, visible=1, enablecompletion=1, lang="vi",
+                                  timecreated=created, timemodified=created)
+                ctx_id, ctx_path = add_context(CONTEXT_COURSE, course_id, dept_ctx_path)
+                courses.append(dict(id=course_id, shortname=shortname, fullname=fullname, kind=kind,
+                                    faculty=fac["code"], ctx_id=ctx_id, ctx_path=ctx_path))
 
     # ------------------------------------------------------------------ ghi danh & vai trò
     enrol_start = ts(cfg.ENROL_START)
@@ -143,29 +176,37 @@ def build_structure(rng: np.random.Generator) -> Tables:
               timemodified=enrol_start, modifierid=2)
 
     by_shortname = {c["shortname"]: c for c in courses}
-    for shortname, (main_idx, assistant_idxs) in cfg.COURSE_TEACHERS.items():
-        enrol_user(by_shortname[shortname], teacher_ids[main_idx], "editingteacher")
-        for idx in assistant_idxs:
-            enrol_user(by_shortname[shortname], teacher_ids[idx], "teacher")
+    for fac in cfg.FACULTIES:
+        staff = teacher_ids[fac["code"]]
+        for shortname, (main_idx, assistant_idxs) in fac["assignments"].items():
+            enrol_user(by_shortname[shortname], staff[main_idx], "editingteacher")
+            for idx in assistant_idxs:
+                enrol_user(by_shortname[shortname], staff[idx], "teacher")
 
-    popularity = rng.uniform(0.6, 1.4, size=len(courses))
-    popularity /= popularity.sum()
     course_students: dict[int, list[int]] = {c["id"]: [] for c in courses}   # SV có ghi danh hiệu lực
-    lo, hi = cfg.COURSES_PER_STUDENT
-    for user_id in student_ids:
-        picks = rng.choice(len(courses), size=int(rng.integers(lo, hi + 1)), replace=False, p=popularity)
-        for course_idx in sorted(picks):
-            course = courses[course_idx]
-            r = rng.random()
-            if r < cfg.SUSPENDED_ENROLMENT_RATE:
-                enrol_user(course, user_id, "student", status=1)
-            elif r < cfg.SUSPENDED_ENROLMENT_RATE + cfg.EXPIRED_ENROLMENT_RATE:
-                enrol_user(course, user_id, "student", timeend=expired_end)
-            else:
-                enrol_user(course, user_id, "student")
-                course_students[course["id"]].append(user_id)
 
-    inactive_users = {student_ids[i] for i in suspended_idx | deleted_idx}
+    def enrol_student(course: dict, user_id: int) -> None:
+        r = rng.random()
+        if r < cfg.SUSPENDED_ENROLMENT_RATE:
+            enrol_user(course, user_id, "student", status=1)
+        elif r < cfg.SUSPENDED_ENROLMENT_RATE + cfg.EXPIRED_ENROLMENT_RATE:
+            enrol_user(course, user_id, "student", timeend=expired_end)
+        else:
+            enrol_user(course, user_id, "student")
+            course_students[course["id"]].append(user_id)
+
+    shared = [by_shortname[s] for s in cfg.SHARED_COURSES]
+    lo, hi = cfg.COURSES_PER_STUDENT
+    for fac in cfg.FACULTIES:
+        home = [c for c in courses if c["faculty"] == fac["code"] and c["shortname"] not in cfg.SHARED_COURSES]
+        popularity = rng.uniform(0.6, 1.4, size=len(home))
+        popularity /= popularity.sum()
+        for user_id in students_of[fac["code"]]:
+            size = min(len(home), int(rng.integers(lo, hi + 1)))
+            for idx in sorted(rng.choice(len(home), size=size, replace=False, p=popularity)):
+                enrol_student(home[idx], user_id)
+            if fac["code"] != "NN" and rng.random() < cfg.SHARED_COURSE_RATE:
+                enrol_student(shared[int(rng.integers(len(shared)))], user_id)
 
     # ------------------------------------------------------------------ nội dung từng môn
     for c in courses:
@@ -177,7 +218,7 @@ def build_structure(rng: np.random.Generator) -> Tables:
 
 def _build_course_content(t: Tables, rng: np.random.Generator, course: dict, active_students: list[int],
                           add_context, created: int) -> None:
-    course_id, shortname = course["id"], course["shortname"]
+    course_id, shortname, kind = course["id"], course["shortname"], course["kind"]
     start = cfg.SEMESTER_START
 
     section_ids = {}
@@ -200,13 +241,15 @@ def _build_course_content(t: Tables, rng: np.random.Generator, course: dict, act
     forum_id = t.add("mdl_forum", course=course_id, type="general", name="Diễn đàn trao đổi", intro="", timemodified=created)
     add_cm("forum", forum_id, 0)
 
-    # Hoạt động điểm danh
-    attendance_id = t.add("mdl_attendance", course=course_id, name="Điểm danh", grade=100, intro="", timemodified=created)
-    add_cm("attendance", attendance_id, 0)
-    status_ids = {}
-    for acronym, description, grade in (("P", "Có mặt", 2), ("A", "Vắng", 0), ("L", "Đi trễ", 1), ("E", "Vắng có phép", 1)):
-        status_ids[acronym] = t.add("mdl_attendance_statuses", attendanceid=attendance_id, acronym=acronym,
-                                    description=description, grade=grade, visible=1, deleted=0, setnumber=0)
+    # Hoạt động điểm danh theo loại môn (môn thực hành có 2 hoạt động: lý thuyết và thực hành)
+    activities: list[tuple[int, tuple[int, int], bool]] = []
+    for att_name, per_week, practice in cfg.ATTENDANCE_PLAN[kind]:
+        attendance_id = t.add("mdl_attendance", course=course_id, name=att_name, grade=100, intro="", timemodified=created)
+        add_cm("attendance", attendance_id, 0)
+        for acronym, description, grade in (("P", "Có mặt", 2), ("A", "Vắng", 0), ("L", "Đi trễ", 1), ("E", "Vắng có phép", 1)):
+            t.add("mdl_attendance_statuses", attendanceid=attendance_id, acronym=acronym,
+                  description=description, grade=grade, visible=1, deleted=0, setnumber=0)
+        activities.append((attendance_id, per_week, practice))
 
     # Trang bài giảng mỗi tuần – theo dõi hoàn thành khi xem (completion=2, completionview=1)
     for week in range(1, cfg.SEMESTER_WEEKS + 1):
@@ -215,7 +258,7 @@ def _build_course_content(t: Tables, rng: np.random.Generator, course: dict, act
                         content=f"Nội dung bài giảng tuần {week} – {course['fullname']}", revision=1, timemodified=created)
         add_cm("page", page_id, week, completion=2, completionview=1, completionexpected=week_end)
 
-    # Nhóm (ca biên): bài nộp nhóm hoặc buổi học theo nhóm
+    # Nhóm (ca biên): bài nộp nhóm hoặc buổi thực hành theo nhóm
     group_members: dict[int, list[int]] = {}
     shuffled = list(rng.permutation(active_students)) if active_students else []
     if shortname in cfg.TEAM_SUBMISSION_COURSES:
@@ -232,14 +275,13 @@ def _build_course_content(t: Tables, rng: np.random.Generator, course: dict, act
         for user_id in members:
             t.add("mdl_groups_members", groupid=group_id, userid=int(user_id), timeadded=ts(cfg.ENROL_START))
 
-    # Bài tập: 5–8 bài, hạn nộp rải đều tuần 3–14 (Chủ nhật 23:59)
-    n_assign = int(rng.integers(cfg.ASSIGNMENTS_PER_COURSE[0], cfg.ASSIGNMENTS_PER_COURSE[1] + 1))
-    due_weeks = np.rint(np.linspace(*cfg.ASSIGNMENT_DUE_WEEKS, n_assign)).astype(int)
-    team_index = n_assign // 2 if shortname in cfg.TEAM_SUBMISSION_COURSES else -1
-    for k, week in enumerate(due_weeks, start=1):
+    # Bài tập theo loại môn; môn nộp nhóm có một bài nộp theo nhóm ở giữa học kỳ
+    plan = cfg.ASSIGNMENT_PLAN[kind]
+    team_index = len(plan) // 2 if shortname in cfg.TEAM_SUBMISSION_COURSES else -1
+    for k, (week, name) in enumerate(plan):
         due = start + timedelta(weeks=int(week) - 1, days=6, hours=23, minutes=59)
-        team = int(k - 1 == team_index)
-        assign_id = t.add("mdl_assign", course=course_id, name="Đồ án nhóm" if team else f"Bài tập {k}", intro="",
+        team = int(k == team_index)
+        assign_id = t.add("mdl_assign", course=course_id, name="Đồ án nhóm" if team else name, intro="",
                           duedate=ts(due), allowsubmissionsfromdate=ts(due - timedelta(days=cfg.ASSIGNMENT_OPEN_DAYS)),
                           cutoffdate=ts(due + timedelta(days=7)), grade=100, completionsubmit=1, submissiondrafts=0,
                           teamsubmission=team, preventsubmissionnotingroup=team, timemodified=created)
@@ -247,23 +289,24 @@ def _build_course_content(t: Tables, rng: np.random.Generator, course: dict, act
 
     # Buổi học (điểm danh). lasttaken để NULL – generate_activity cập nhật khi "GV điểm danh".
     if shortname not in cfg.NO_ATTENDANCE_SESSION_COURSES:
-        if shortname in cfg.LAB_GROUP_COURSES:
-            # 1 buổi lý thuyết cả lớp + 1 buổi thực hành riêng cho mỗi nhóm, mỗi buổi một ngày khác nhau
-            days = sorted(int(d) for d in rng.choice(5, size=1 + len(group_members), replace=False))
-            weekly_slots = [(days[0], 0)] + [(days[i + 1], gid) for i, gid in enumerate(group_members)]
-        else:
-            per_week = int(rng.integers(cfg.ATTENDANCE_SESSIONS_PER_WEEK[0], cfg.ATTENDANCE_SESSIONS_PER_WEEK[1] + 1))
-            weekly_slots = [(int(d), 0) for d in sorted(rng.choice(5, size=per_week, replace=False))]
+        # Mỗi buổi trong tuần một ngày khác nhau (Thứ 2 – Thứ 6): (attendanceid, ngày, groupid)
+        slots: list[tuple[int, int]] = []
+        for attendance_id, (lo, hi), practice in activities:
+            if practice and shortname in cfg.LAB_GROUP_COURSES:
+                slots += [(attendance_id, gid) for gid in group_members]
+            else:
+                slots += [(attendance_id, 0)] * int(rng.integers(lo, hi + 1))
+        days = sorted(int(d) for d in rng.choice(5, size=min(5, len(slots)), replace=False))
+        weekly_slots = [(att, days[i], gid) for i, (att, gid) in enumerate(slots[:len(days)])]
         hour = int(rng.choice(cfg.ATTENDANCE_SLOT_HOURS))
-        number = 0
+        numbers: dict[int, int] = {}
         for week in range(cfg.SEMESTER_WEEKS):
-            slots = weekly_slots
-            for day, group_id in slots:
-                number += 1
+            for attendance_id, day, group_id in weekly_slots:
+                numbers[attendance_id] = numbers.get(attendance_id, 0) + 1
                 sessdate = ts(start + timedelta(weeks=week, days=int(day), hours=hour))
                 t.add("mdl_attendance_sessions", attendanceid=attendance_id, groupid=group_id, sessdate=sessdate,
                       duration=3 * 3600, lasttaken=None, lasttakenby=0, timemodified=created,
-                      description=f"Buổi {number}" + (" (thực hành theo nhóm)" if group_id else ""),
+                      description=f"Buổi {numbers[attendance_id]}" + (" (thực hành theo nhóm)" if group_id else ""),
                       statusset=0, calendarevent=1)
 
     for number, cm_ids in sequences.items():
@@ -302,7 +345,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"moodle_src đã có {existing} khóa học. Dùng --reset để dựng lại từ đầu.", file=sys.stderr)
             return 1
         if args.reset:
-            truncate(conn, STRUCTURE_TABLES + ACTIVITY_TABLES)
+            truncate(conn, STRUCTURE_TABLES + ACTIVITY_TABLES + MESSAGE_TABLES)
             print("Đã xóa dữ liệu cũ trong moodle_src.")
 
     tables = build_structure(np.random.default_rng(cfg.RANDOM_SEED))

@@ -1,0 +1,152 @@
+@startuml class_phan_tich
+!include _style.iuml
+hide circle
+skinparam classAttributeIconSize 0
+
+abstract class NguoiDung {
+  - maNguoiDung : int
+  - tenDangNhap : string
+  - hoTen : string
+  - email : string
+}
+class SinhVien {
+  - mssv : string
+}
+class GiangVien
+class TaiKhoanDashboard {
+  - vaiTro : VaiTro
+  - matKhauBam : string
+  - dangHoatDong : bool
+  - lanDangNhapCuoi : datetime
+  - lanDoiMatKhau : datetime
+  + dangNhap(matKhau) : bool
+  + doiMatKhau(cu, moi)
+  + khoa()
+  + moKhoa()
+}
+enum VaiTro {
+  ADMIN
+  TEACHER
+}
+class Khoa {
+  - maKhoa : int
+  - tenKhoa : string
+}
+class BoMon {
+  - maBoMon : int
+  - tenBoMon : string
+}
+class MonHoc {
+  - maMon : int
+  - maHienThi : string
+  - tenMon : string
+  - namHoc : string
+  - hocKy : int
+  - ngayBatDau : date
+  - ngayKetThuc : date
+}
+class GhiDanh {
+  - batDau : datetime
+  - ketThuc : datetime
+  - trangThai : int
+}
+class BuoiHoc {
+  - thoiGian : datetime
+  - thoiLuong : int
+}
+class DiemDanh {
+  - trangThai : string
+}
+class BaiTap {
+  - tenBai : string
+  - hanNop : datetime
+}
+class BaiNop {
+  - thoiDiemNop : datetime
+  - trangThai : string
+}
+class SuKienTruyCap {
+  - thoiDiem : datetime
+  - tenSuKien : string
+  - loaiThaoTac : string
+}
+class AnhChupRuiRo {
+  - ngay : date
+  - diemVangHoc : 0..2
+  - diemKhongTuongTac : 0..2
+  - diemThieuBai : 0..2
+  - diemRuiRo : 0..100
+  - mucRuiRo : MucRuiRo
+  - lyDo : string[*]
+  + tinhDiem(trungViLop)
+  + xepMuc() : MucRuiRo
+}
+enum MucRuiRo {
+  RED
+  YELLOW
+  GREEN
+}
+class TienDoMonNgay {
+  - ngay : date
+  - soSVGhiDanh : int
+  - soSVTuongTac : int
+  - tyLeNopBai : percent
+  - tyLeChuyenCan : percent
+  - tyLeHoanThanh : percent
+}
+class LuuLuongGio {
+  - gio : datetime
+  - soLuotTruyCap : int
+  - soNguoiDung : int
+  - onlineCaoNhat : int
+  - laGioCaoDiem : bool
+}
+class CanThiep {
+  - loaiHanhDong : string
+  - noiDung : string
+  - mucRuiRoLucDo : MucRuiRo
+  - thoiDiem : datetime
+}
+class LanChayETL {
+  - tenJob : string
+  - batDau : datetime
+  - ketThuc : datetime
+  - trangThai : string
+  - soDongDoc : int
+  - soDongGhi : int
+}
+class BanSaoLuu {
+  - tenFile : string
+  - thoiDiemTao : datetime
+  - nguoiTao : string
+  - soDong : int
+  + phucHoi()
+}
+
+NguoiDung <|-- SinhVien
+NguoiDung <|-- GiangVien
+NguoiDung "1" -- "0..1" TaiKhoanDashboard : sở hữu >
+TaiKhoanDashboard ..> VaiTro
+Khoa "1" o-- "1..*" BoMon
+BoMon "1" o-- "1..*" MonHoc
+GiangVien "1..*" -- "0..*" MonHoc : phụ trách >
+(SinhVien, MonHoc) .. GhiDanh
+MonHoc "1" *-- "0..*" BuoiHoc
+MonHoc "1" *-- "0..*" BaiTap
+BuoiHoc "1" *-- "0..*" DiemDanh
+SinhVien "1" -- "0..*" DiemDanh
+BaiTap "1" *-- "0..*" BaiNop
+SinhVien "1" -- "0..*" BaiNop
+NguoiDung "1" -- "0..*" SuKienTruyCap : phát sinh >
+MonHoc "0..1" -- "0..*" SuKienTruyCap
+SinhVien "1" -- "0..*" AnhChupRuiRo
+MonHoc "1" -- "0..*" AnhChupRuiRo
+AnhChupRuiRo ..> MucRuiRo
+MonHoc "1" -- "0..*" TienDoMonNgay
+GiangVien "1" -- "0..*" CanThiep : ghi nhận >
+SinhVien "1" -- "0..*" CanThiep
+MonHoc "1" -- "0..*" CanThiep
+LanChayETL "0..1" -- "0..*" AnhChupRuiRo : tạo ra >
+LanChayETL "0..1" -- "0..*" TienDoMonNgay : tạo ra >
+LanChayETL "0..1" -- "0..*" LuuLuongGio : tạo ra >
+@enduml

@@ -31,6 +31,8 @@ class KpisOut(Stamped):
     avg_online_users_today: float
     current_online: int
     current_online_at: datetime | None
+    unique_students: int = 0                   # sinh viên khác nhau (một SV học nhiều môn tính một lần)
+    red_rate_prev_week: float | None = None    # tỷ lệ đỏ 7 ngày trước – cho dòng "so với tuần trước"
 
 
 class FacultyEnrollment(BaseModel):
@@ -69,6 +71,34 @@ class CourseEnrollment(BaseModel):
     avg_completion_rate: float | None          # None = chưa có dữ liệu (migration V007)
     assignment_submission_rate: float | None
     attendance_rate: float | None
+    red_rate: float | None = None
+    yellow_rate: float | None = None
+    green_rate: float | None = None
+    rule_scope: str | None = None              # GLOBAL = luật mặc định, COURSE = luật riêng của môn
+    rule_label: str | None = None
+
+
+class FacultySummary(BaseModel):
+    faculty_id: int
+    faculty_name: str
+    course_count: int
+    enrolled: int
+    unique_students: int
+    active: int
+    avg_active_rate: float | None
+    avg_submission_rate: float | None
+    avg_attendance_rate: float | None
+    red: int
+    yellow: int
+    green: int
+    red_rate: float | None
+    red_rate_delta_week: float | None
+    custom_rule_courses: int
+    school_enrolled: int | None = None
+    school_active_rate: float | None
+    school_red_rate: float | None
+    school_submission_rate: float | None = None     # so sánh KPI khoa với toàn trường (kế hoạch Mục 3.3)
+    school_attendance_rate: float | None = None
 
 
 class CourseEnrollmentOut(Stamped):
@@ -76,6 +106,7 @@ class CourseEnrollmentOut(Stamped):
     academic_year: str
     semester: int
     items: list[CourseEnrollment]
+    summary: FacultySummary | None = None
 
 
 class CourseHeader(BaseModel):
@@ -156,3 +187,78 @@ class HeatmapOut(Stamped):
     from_date: date
     to_date: date
     matrix: list[HeatCell]
+
+
+class FacultyCompareItem(BaseModel):
+    faculty_id: int
+    faculty_name: str
+    course_count: int
+    enrolled: int
+    unique_students: int
+    active: int
+    inactive: int
+    active_rate: float | None
+    avg_submission_rate: float | None
+    avg_attendance_rate: float | None
+    red: int
+    yellow: int
+    green: int
+    red_rate: float | None
+    yellow_rate: float | None
+    green_rate: float | None
+    red_rate_delta_week: float | None
+    custom_rule_courses: int
+
+
+class SchoolSummary(BaseModel):
+    enrolled: int
+    unique_students: int
+    active: int
+    course_count: int
+    red: int
+    yellow: int
+    green: int
+    active_rate: float | None
+    red_rate: float | None
+    yellow_rate: float | None
+    green_rate: float | None
+    avg_submission_rate: float | None = None
+    avg_attendance_rate: float | None = None
+
+
+class FacultyCompareOut(Stamped):
+    academic_year: str
+    semester: int
+    school: SchoolSummary
+    items: list[FacultyCompareItem]
+
+
+class TrendPoint(BaseModel):
+    period: str
+    period_start: date
+    period_end: date
+    stat_date: date
+    red: int
+    yellow: int
+    green: int
+    total: int
+    courses: int
+    red_rate: float | None
+    yellow_rate: float | None
+    green_rate: float | None
+
+
+class RuleChange(BaseModel):
+    date: date
+    course_id: int
+    label: str
+
+
+class RiskTrendOut(Stamped):
+    academic_year: str
+    semester: int
+    scope: str                                 # school | faculty | course
+    granularity: str
+    week1_start: date
+    series: list[TrendPoint]
+    rule_changes: list[RuleChange]

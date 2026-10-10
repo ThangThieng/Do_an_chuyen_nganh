@@ -13,16 +13,20 @@ Chưa có dữ liệu (0 buổi điểm danh / 0 bài tới hạn) -> tiêu chí
 
 So sánh tỷ lệ với ngưỡng bằng phân số chính xác (Fraction) để các ca biên như "vắng đúng 3/10 buổi = 30%"
 luôn cho kết quả đúng, không phụ thuộc sai số dấu phẩy động.
+
+Luật riêng của môn (etl/rules.py): ngưỡng và trọng số của môn được truyền vào qua tham số; luật bổ sung
+(extra_rules) chỉ NÂNG mức rủi ro, không hạ, và không đổi điểm 0–100 (để điểm còn so sánh được giữa các môn).
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
 
 from etl.config import RISK_LEVEL_RULES, RISK_THRESHOLDS, RISK_WEIGHTS
 
 ATTENDANCE_STATUS_BY_SCORE = {0: "OK", 1: "WARN", 2: "CRITICAL"}
+LEVEL_ORDER = {"GREEN": 0, "YELLOW": 1, "RED": 2}
 
 
 def _exact(value: float) -> Fraction:
@@ -50,13 +54,52 @@ def _validate(r: Mapping) -> None:
         raise ValueError(f"access_count_14d âm: {r['access_count_14d']}")
 
 
+def _extra_rule_matches(rule: Mapping, r: Mapping) -> str | None:
+    """Trả về câu lý do nếu sinh viên khớp luật bổ sung, ngược lại None."""
+    t = rule["type"]
+    if t == "consecutive_missing":
+        n = int(r.get("max_consecutive_missing") or 0)
+        return f"Bỏ nộp {n} bài liên tiếp" if n >= rule["count"] else None
+    if t == "absent_sessions":
+        detail = r.get("attendance_detail") or []
+        if rule.get("attendance_id"):
+            chosen = [d for d in detail if int(d["attendance_id"]) == int(rule["attendance_id"])]
+        elif rule.get("attendance_name"):
+            key = str(rule["attendance_name"]).casefold()
+            chosen = [d for d in detail if key in str(d["name"]).casefold()]
+        else:
+            chosen = detail
+        absent = sum(int(d["absent"]) for d in chosen)
+        if absent < rule["count"]:
+            return None
+        targeted = rule.get("attendance_id") or rule.get("attendance_name")
+        scope = f" ({chosen[0]['name']})" if targeted and len(chosen) == 1 else ""
+        return f"Vắng {absent} buổi{scope}"
+    if t == "absence_rate":
+        total = int(r["total_sessions"])
+        if total and Fraction(int(r["absent_sessions"]), total) >= Fraction(int(rule["percent"]), 100):
+            return f"Vắng {int(r['absent_sessions'])}/{total} buổi (từ {rule['percent']}%)"
+        return None
+    if t == "inactive_days":
+        days = r["days_since_last_access"]
+        if days is None:
+            return "Chưa từng truy cập môn học"
+        return f"{days} ngày chưa truy cập" if days >= rule["days"] else None
+    if t == "missing_count":
+        n = int(r["missing_assignments_count"])
+        return f"Thiếu {n} bài tập" if n >= rule["count"] else None
+    raise ValueError(f"Loại luật bổ sung không hỗ trợ: {t}")
+
+
 def score_student(r: Mapping, class_median_14d: float,
                   thresholds: Mapping[str, float] = RISK_THRESHOLDS,
                   weights: Mapping[str, float] = RISK_WEIGHTS,
-                  level_rules: Mapping[str, int | bool] = RISK_LEVEL_RULES) -> dict:
+                  level_rules: Mapping[str, int | bool] = RISK_LEVEL_RULES,
+                  extra_rules: Sequence[Mapping] = ()) -> dict:
     """
     r cần các khóa: total_sessions, absent_sessions, days_since_last_access (None = chưa từng truy cập),
-    access_count_14d, total_assignments, missing_assignments_count.
+    access_count_14d, total_assignments, missing_assignments_count; khi có luật bổ sung cần thêm
+    max_consecutive_missing và attendance_detail ([{attendance_id, name, sessions, absent}]).
     class_median_14d: trung vị access_count_14d của lớp.
     """
     _validate(r)
@@ -103,12 +146,27 @@ def score_student(r: Mapping, class_median_14d: float,
               or red_criteria >= level_rules["red_min_red_criteria"]
               or total >= level_rules["red_min_total"])
     level = "RED" if is_red else "YELLOW" if total >= 1 else "GREEN"
+
+    # ---- luật bổ sung của môn: chỉ nâng mức
+    matched: list[dict] = []
+    for index, rule in enumerate(extra_rules):
+        reason = _extra_rule_matches(rule, r)
+        if reason is None:
+            continue
+        target = rule.get("level", "RED")
+        matched.append(dict(index=index, type=rule["type"], level=target, reason=reason))
+        if LEVEL_ORDER[target] > LEVEL_ORDER[level]:
+            level = target
+        text = f"{reason} (luật của môn)"
+        if text not in reasons:
+            reasons.append(text)
+
     weighted = (Decimal(str(weights["attendance"])) * c1 + Decimal(str(weights["inactivity"])) * c2
                 + Decimal(str(weights["assignment"])) * c3)
     score = int((Decimal(100) * weighted / 2).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
     return dict(
         score_attendance=c1, score_inactivity=c2, score_assignment=c3,
-        risk_score=score, risk_level=level, risk_reasons=reasons,
+        risk_score=score, risk_level=level, risk_reasons=reasons, matched_rules=matched,
         attendance_status="NO_DATA" if total_sessions == 0 else ATTENDANCE_STATUS_BY_SCORE[c1],
     )

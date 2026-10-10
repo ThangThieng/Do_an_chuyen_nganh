@@ -1,0 +1,41 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Điều hướng</title>
+<link rel="stylesheet" href="style.css">
+<style>
+body { width: 1440px; background: #fff; }
+.row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 34px; padding: 24px 28px 10px; position: relative; }
+.lvl { border: 2px solid #256abf; border-radius: 12px; overflow: hidden; background: #fff; position: relative; }
+.lvl .t { background: #256abf; color: #fff; padding: 10px 14px; font-weight: 700; font-size: 15px; }
+.lvl .u { background: #eef4fc; padding: 6px 14px; font-size: 12px; color: #1c4f8f; border-bottom: 1px solid #d6e4f6; }
+.lvl ul { margin: 10px 0 12px; padding-left: 30px; font-size: 13px; }
+.lvl li { margin: 3px 0; }
+.lvl .q { padding: 0 14px 12px; font-size: 12.5px; color: #52514e; font-style: italic; }
+.lvl.l2 { border-color: #3a7bc8; } .lvl.l2 .t { background: #3a7bc8; }
+.lvl.l3 { border-color: #5a93d3; } .lvl.l3 .t { background: #4f88cc; }
+.lvl.l4 { border-color: #7aa9de; } .lvl.l4 .t { background: #6b9bd6; }
+.arrow { position: absolute; top: 50%; right: -30px; width: 26px; text-align: center; font-size: 26px; color: #256abf; transform: translateY(-50%); }
+.scale { margin: 6px 28px 0; height: 30px; border-radius: 999px; background: linear-gradient(90deg, #256abf, #b9d3f0); color: #fff; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; font-weight: 700; font-size: 13px; }
+.scale span:last-child { color: #1c4f8f; }
+.note { margin: 12px 28px 22px; font-size: 13px; color: #374151; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 26px; }
+</style></head><body>
+<div class="row">
+  <div class="lvl"><div class="t">① Toàn trường (Macro)</div><div class="u">/admin · trang Tổng quan</div>
+    <ul><li>6 thẻ KPI (giữ nguyên, thêm “so với tuần trước”)</li><li>Biểu đồ tròn phân bố rủi ro toàn trường</li><li>Đồ thị xu hướng Đỏ/Vàng/Xanh theo tuần</li><li>So sánh các Khoa: cột Quy mô · Tỷ lệ tương tác · Phân bố rủi ro + bảng tóm tắt</li><li>Lưu lượng, heatmap (giữ nguyên)</li></ul>
+    <div class="q">Câu hỏi: “Toàn hệ thống đang ổn không? Khoa nào cần chú ý?”</div><span class="arrow">➜</span></div>
+  <div class="lvl l2"><div class="t">② Khoa (Meso)</div><div class="u">/admin/faculties/:facultyId</div>
+    <ul><li>KPI của khoa, so với trung bình trường</li><li>Biểu đồ tròn + xu hướng rủi ro của khoa (dùng lại)</li><li>So sánh các môn: thanh ngang theo chỉ số, 100% theo mức rủi ro</li><li>Bảng môn học (giữ nguyên cột, thêm % Đỏ)</li></ul>
+    <div class="q">Câu hỏi: “Trong khoa, môn nào kéo chỉ số xuống?”</div><span class="arrow">➜</span></div>
+  <div class="lvl l3"><div class="t">③ Môn học (Micro)</div><div class="u">/admin/courses/:courseId · GV: /teacher/courses/:id/risk</div>
+    <ul><li>3 thẻ đèn giao thông + biểu đồ tròn (giữ nguyên)</li><li>Đồ thị xu hướng rủi ro của lớp (mới)</li><li>Bảng sinh viên: thêm điểm từng tiêu chí C1/C2/C3</li><li>Tiến độ lớp (giữ nguyên)</li><li>GV: Thiết lập cảnh báo riêng của môn, Trung tâm can thiệp (mới)</li></ul>
+    <div class="q">Câu hỏi: “Lớp này đang tốt lên hay xấu đi? Ai cần hỗ trợ?”</div><span class="arrow">➜</span></div>
+  <div class="lvl l4"><div class="t">④ Sinh viên</div><div class="u">cửa sổ chi tiết (Modal) – mở từ cấp ③</div>
+    <ul><li>Lý do cảnh báo (giữ nguyên)</li><li>Bảng phân tích điểm rủi ro (mới)</li><li>So sánh với lớp, hoạt động theo tuần, bài tập, can thiệp (giữ nguyên)</li></ul>
+    <div class="q">Câu hỏi: “Vì sao sinh viên này bị cảnh báo? Nên làm gì?”</div></div>
+</div>
+<div class="scale"><span>Bức tranh tổng thể · nhiều biểu đồ, ít dòng chi tiết</span><span>Chi tiết từng sinh viên · bảng và lý do cụ thể</span></div>
+<div class="note">
+  <div>• Mỗi cấp có <b>URL riêng</b> → nút Back của trình duyệt, F5, đánh dấu trang và chia sẻ đường dẫn đều đúng cấp.</div>
+  <div>• Thanh cấp xem (breadcrumb) luôn hiện ở đầu trang; nhấn cấp trên để quay lại.</div>
+  <div>• Bộ lọc năm học/học kỳ <b>đi theo URL</b> (query string) khi chuyển cấp.</div>
+  <div>• Mọi biểu đồ/thẻ có liên kết <b>Nguồn &amp; cách tính</b> dùng chung một thành phần.</div>
+</div>
+</body></html>

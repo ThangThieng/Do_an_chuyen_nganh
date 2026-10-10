@@ -12,6 +12,7 @@ import pandas as pd
 
 from etl.config import TZ
 from etl.extract.course_data import CourseDataset
+from etl.rules import default_params
 from etl.transform.risk_rules import score_student
 from etl.transform.semester import academic_term
 
@@ -23,7 +24,8 @@ COUNT_COLUMNS = ["total_sessions", "attended_sessions", "absent_sessions", "tota
                  "submitted_assignments", "late_submissions", "tracked_activities", "completed_activities"]
 
 RISK_KEYS = ("course_id", "user_id", "snapshot_date")
-RISK_JSON_COLUMNS = ("risk_reasons", "weekly_activity", "assignment_detail")
+RISK_JSON_COLUMNS = ("risk_reasons", "weekly_activity", "assignment_detail", "attendance_detail")
+DEFAULT_RULE = (1, None)      # (rule_set_id, params) – None = luật mặc định theo etl/config.py
 RISK_COLUMNS = (
     "snapshot_date", "course_id", "user_id", "faculty_id", "faculty_name", "course_shortname", "course_fullname",
     "academic_year", "semester", "teacher_ids", "student_code", "student_name", "email",
@@ -32,7 +34,7 @@ RISK_COLUMNS = (
     "attendance_status", "total_assignments", "submitted_assignments", "missing_assignments_count",
     "late_submissions", "completion_rate", "score_attendance", "score_inactivity", "score_assignment",
     "risk_score", "risk_level", "risk_reasons", "weekly_activity", "assignment_detail", "class_avg_access",
-    "etl_run_id",
+    "rule_set_id", "max_consecutive_missing", "attendance_detail", "etl_run_id",
 )
 
 
@@ -85,9 +87,50 @@ def _iso_local(epoch) -> str | None:
     return datetime.fromtimestamp(int(epoch), TZ).isoformat()
 
 
-def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int) -> list[dict]:
+def attendance_detail_by_student(ds: CourseDataset) -> dict[tuple[int, int], list[dict]]:
+    """(môn, SV) -> [{attendance_id, name, sessions, absent}] theo từng hoạt động điểm danh (luật “vắng n buổi …”)."""
+    att = ds.attendance
+    if att.empty:
+        return {}
+    if "attendance_id" not in att.columns:          # dữ liệu cũ/kiểm thử: một hoạt động điểm danh mỗi môn
+        att = att.assign(attendance_id=0, attendance_name="Điểm danh")
+    grouped = (att.assign(absent=att["acronym"].isna() | (att["acronym"] == ABSENT_ACRONYM))
+               .groupby(KEYS + ["attendance_id", "attendance_name"], as_index=False)
+               .agg(sessions=("session_id", "count"), absent=("absent", "sum"))
+               .sort_values(KEYS + ["attendance_id"]))
+    out: dict[tuple[int, int], list[dict]] = defaultdict(list)
+    for g in grouped.itertuples(index=False):
+        out[(int(g.course_id), int(g.user_id))].append(dict(
+            attendance_id=int(g.attendance_id), name=str(g.attendance_name), sessions=int(g.sessions),
+            absent=int(g.absent)))
+    return out
+
+
+def max_consecutive_missing(details: list[dict]) -> int:
+    """Số bài đã tới hạn bị thiếu liên tiếp dài nhất, xếp theo hạn nộp (assignment_detail đã xếp sẵn)."""
+    best = run = 0
+    for a in sorted(details, key=lambda x: (x["duedate"] or "", x["assign_id"])):
+        if a["status"] == "missing":
+            run += 1
+            best = max(best, run)
+        elif a["status"] == "submitted":
+            run = 0
+    return best
+
+
+def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int,
+                    rules: dict[int, tuple[int, dict]] | None = None,
+                    default_rule: tuple[int, dict | None] = DEFAULT_RULE) -> list[dict]:
+    """
+    rules: course_id -> (rule_set_id, params) của môn có luật riêng; môn khác dùng default_rule (luật trường).
+    params theo etl/rules.py: thresholds, weights, level_rules, extra_rules.
+    """
     if metrics.empty:
         return []
+    rules = rules or {}
+    default_id, default_p = default_rule
+    default_p = default_p or default_params()
+    attendance_detail = attendance_detail_by_student(ds)
     as_of_ts, snapshot_date = ds.as_of_ts, ds.as_of.date()
     courses = {int(c.course_id): c for c in ds.courses.itertuples(index=False)}
     terms = {cid: academic_term(int(c.startdate)) for cid, c in courses.items()}
@@ -127,11 +170,17 @@ def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int) -> li
             last_access = datetime.fromtimestamp(int(m.last_access_ts), TZ)
             days_since = (snapshot_date - last_access.date()).days
 
+        rule_set_id, params = rules.get(key[0], (default_id, default_p))
+        details = assignments.get(key, [])
+        consecutive = max_consecutive_missing(details)
+        att_detail = attendance_detail.get(key, [])
         result = score_student(dict(
             total_sessions=m.total_sessions, absent_sessions=m.absent_sessions,
             days_since_last_access=days_since, access_count_14d=m.access_count_14d,
             total_assignments=m.total_assignments, missing_assignments_count=m.missing_assignments_count,
-        ), float(class_median_14d[key[0]]))
+            max_consecutive_missing=consecutive, attendance_detail=att_detail,
+        ), float(class_median_14d[key[0]]), thresholds=params["thresholds"], weights=params["weights"],
+            level_rules=params["level_rules"], extra_rules=params.get("extra_rules", ()))
 
         attendance_weeks = sessions_by_week.get(key, {})
         weekly_activity = []
@@ -160,8 +209,9 @@ def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int) -> li
             score_attendance=result["score_attendance"], score_inactivity=result["score_inactivity"],
             score_assignment=result["score_assignment"], risk_score=result["risk_score"],
             risk_level=result["risk_level"], risk_reasons=result["risk_reasons"],
-            weekly_activity=weekly_activity, assignment_detail=assignments.get(key, []),
+            weekly_activity=weekly_activity, assignment_detail=details,
             class_avg_access=round(float(class_avg_access[key[0]]), 2),
+            rule_set_id=int(rule_set_id), max_consecutive_missing=consecutive, attendance_detail=att_detail,
             etl_run_id=run_id,
         ))
     return rows

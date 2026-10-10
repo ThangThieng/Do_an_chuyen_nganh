@@ -72,7 +72,7 @@ class Source:
 
 
 ENROL_SQL = """
-SELECT c.id AS courseid, ctx.id AS course_ctx, ue.userid, u.idnumber, ue.timeend
+SELECT c.id AS courseid, ctx.id AS course_ctx, ue.userid, u.idnumber, u.department, ue.timeend
 FROM mdl_course c
 JOIN mdl_context ctx          ON ctx.instanceid = c.id AND ctx.contextlevel = 50
 JOIN mdl_enrol e              ON e.courseid = c.id AND e.status = 0
@@ -135,16 +135,29 @@ def load_source(conn: psycopg.Connection, as_of_ts: int) -> Source:
 
 
 # ============================================================================= hồ sơ hành vi
+FACULTY_BY_NAME = {f["name"]: f for f in cfg.FACULTIES}
+
+
+def _faculty(department: str) -> dict:
+    """Khoa quản lý sinh viên (mdl_user.department); tên lạ -> dùng tham số mặc định."""
+    return FACULTY_BY_NAME.get(department, {"profiles": cfg.PROFILES, "activity": 1.0})
+
+
 def assign_profiles(enrol: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
-    """Mỗi SV có hồ sơ chung; mỗi cặp SV–môn giữ hồ sơ đó với xác suất 80%, còn lại bốc thăm lại."""
-    names, probs = list(cfg.PROFILES), list(cfg.PROFILES.values())
-    users = enrol["userid"].unique()
-    base = dict(zip(users, rng.choice(names, size=len(users), p=probs)))
+    """
+    Mỗi SV có hồ sơ chung bốc theo tỷ lệ hồ sơ của KHOA mình; mỗi cặp SV–môn giữ hồ sơ đó với xác suất 80%,
+    còn lại bốc thăm lại theo cùng tỷ lệ. Hệ số tần suất truy cập của khoa lưu ở cột activity.
+    """
+    names = list(cfg.PROFILES)
+    enrol = enrol.copy()
+    users = enrol.drop_duplicates("userid")[["userid", "department"]]
+    base = {int(u): rng.choice(names, p=[_faculty(d)["profiles"][k] for k in names])
+            for u, d in zip(users["userid"], users["department"])}
     n = len(enrol)
     keep = rng.random(n) < cfg.PROFILE_CONSISTENCY
-    redraw = rng.choice(names, size=n, p=probs)
-    enrol = enrol.copy()
+    redraw = np.array([rng.choice(names, p=[_faculty(d)["profiles"][k] for k in names]) for d in enrol["department"]])
     enrol["profile"] = np.where(keep, enrol["userid"].map(base), redraw)
+    enrol["activity"] = enrol["department"].map(lambda d: _faculty(d)["activity"]).astype(float)
     behaviour = enrol["profile"].map(cfg.BEHAVIOR)
     enrol["never"] = rng.random(n) < behaviour.map(lambda b: b["never"]).to_numpy()
     enrol["dropout"] = rng.random(n) < behaviour.map(lambda b: b["dropout"]).to_numpy()
@@ -164,6 +177,7 @@ def build_sessions(src: Source, rng: np.random.Generator, as_of_ts: int) -> pd.D
     n = len(enrol)
     lo, hi = _profile_param(enrol, "sessions_per_week", 0), _profile_param(enrol, "sessions_per_week", 1)
     never, dropout = enrol["never"].to_numpy(), enrol["dropout"].to_numpy()
+    activity = enrol["activity"].to_numpy()
     courses = enrol["courseid"].to_numpy()
 
     idx_parts: list[np.ndarray] = []
@@ -173,6 +187,9 @@ def build_sessions(src: Source, rng: np.random.Generator, as_of_ts: int) -> pd.D
         hi_w = np.where(dropout & (week >= cfg.DROPOUT_FROM_WEEK_INDEX), hi // cfg.DROPOUT_ACTIVITY_DIVISOR, hi)
         lo_w = np.minimum(lo, hi_w)
         counts = rng.integers(lo_w, hi_w + 1)
+        # hệ số tần suất của khoa: làm tròn ngẫu nhiên để giữ đúng kỳ vọng
+        scaled = counts * activity
+        counts = np.floor(scaled + rng.random(n)).astype(np.int64)
         if week + 1 == cfg.MIDTERM_WEEK:
             counts = np.rint(counts * cfg.MIDTERM_FACTOR).astype(np.int64)
         counts[never] = 0
@@ -187,7 +204,7 @@ def build_sessions(src: Source, rng: np.random.Generator, as_of_ts: int) -> pd.D
         members = np.flatnonzero((courses == a.courseid) & ~never)
         if members.size == 0:
             continue
-        lam = mean_weekly[members] * (cfg.DEADLINE_WINDOW_DAYS / 7) * (cfg.DEADLINE_FACTOR - 1)
+        lam = mean_weekly[members] * activity[members] * (cfg.DEADLINE_WINDOW_DAYS / 7) * (cfg.DEADLINE_FACTOR - 1)
         if (a.duedate - start) // cfg.WEEK >= cfg.DROPOUT_FROM_WEEK_INDEX:
             lam = np.where(dropout[members], lam / cfg.DROPOUT_ACTIVITY_DIVISOR, lam)
         idx = np.repeat(members, rng.poisson(lam))
@@ -403,14 +420,19 @@ def build_attendance(src: Source, rng: np.random.Generator, as_of_ts: int) -> pd
         r = rng.random(len(pairs))
         acronym = np.select([r < p, r < p + 0.03, r < p + 0.05], ["P", "L", "E"], default="A")
 
-        attendance_id = int(course_sessions["attendanceid"].iat[0])
-        statuses = src.statuses[src.statuses["attendanceid"] == attendance_id]
-        status_id = dict(zip(statuses["acronym"], statuses["id"]))
+        # Mỗi môn có thể có nhiều hoạt động điểm danh (môn thực hành: lý thuyết + thực hành) – mỗi hoạt động
+        # có bộ trạng thái riêng trong mdl_attendance_statuses
+        status_id: dict[tuple[int, str], int] = {}
+        statusset: dict[int, str] = {}
+        for att_id, statuses in src.statuses.groupby("attendanceid"):
+            status_id.update({(int(att_id), a): int(i) for a, i in zip(statuses["acronym"], statuses["id"])})
+            statusset[int(att_id)] = ",".join(str(int(i)) for i in statuses["id"])
+        att_ids = pairs["attendanceid"].to_numpy()
         keep = rng.random(len(pairs)) >= cfg.MISSING_ATTENDANCE_LOG_RATE
         frames.append(pd.DataFrame({
             "sessionid": pairs["sessionid"].to_numpy(), "studentid": pairs["userid"].to_numpy(),
-            "statusid": [int(status_id[a]) for a in acronym],
-            "statusset": ",".join(str(int(i)) for i in statuses["id"]),
+            "statusid": [status_id[(int(att), a)] for att, a in zip(att_ids, acronym)],
+            "statusset": [statusset[int(att)] for att in att_ids],
             "timetaken": pairs["sessdate"].to_numpy() + cfg.ATTENDANCE_TAKEN_DELAY,
             "takenby": int(teacher_of[cid]), "remarks": "", "ipaddress": "",
         })[keep])
@@ -557,7 +579,7 @@ def main(argv: list[str] | None = None) -> int:
     analyze_tables(ACTIVITY_TABLES + ("mdl_attendance_sessions", "mdl_user"))
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    truth = src.enrol[["courseid", "userid", "profile", "never", "dropout"]]
+    truth = src.enrol[["courseid", "userid", "profile", "never", "dropout", "department"]]
     truth.to_csv(OUTPUT_DIR / "ground_truth_profiles.csv", index=False)
 
     print(f"AS_OF = {as_of.isoformat()}")

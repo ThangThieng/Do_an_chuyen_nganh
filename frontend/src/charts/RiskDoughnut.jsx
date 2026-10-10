@@ -1,10 +1,24 @@
-/** GV 2.1 – Doughnut tỷ lệ rủi ro; nhấn lát cắt hoặc dòng chú thích để lọc bảng (SPEC 5.3). */
+/**
+ * Biểu đồ tròn tỷ lệ rủi ro (giữ nguyên theo góp ý 2 – cô đánh giá cao); nhấn lát cắt hoặc dòng chú thích để lọc bảng.
+ * v1.2: bỏ icon; nút tiêu chí hiện ngưỡng ngắn gọn của LUẬT ĐANG ÁP DỤNG cho môn (rule từ API, không viết cứng).
+ */
 import { useMemo, useRef } from "react";
 import { Doughnut, getElementAtEvent } from "react-chartjs-2";
 import { CRITERIA, RISK, RISK_LEVELS } from "../theme/tokens.js";
 import { fmtInt, fmtPercent, share } from "../utils/format.js";
 
-export default function RiskDoughnut({ summary, selectedLevels, onToggleLevel, criterion, onCriterion }) {
+const pct = (v) => `${Math.round(Number(v) * 100)}%`;
+
+function thresholdHint(key, rule) {
+  if (!rule) return null;
+  const t = rule.thresholds;
+  if (key === "attendance") return `≥${pct(t.absence_yellow)}`;
+  if (key === "inactivity") return `>${t.inactive_yellow_days} ngày`;
+  return `≥${pct(t.missing_yellow)}`;
+}
+
+export default function RiskDoughnut({ summary, selectedLevels = [], onToggleLevel, criterion, onCriterion, rule,
+  centerLabel = "sinh viên" }) {
   const ref = useRef(null);
   const counts = RISK_LEVELS.map((l) => summary[l.toLowerCase()]);
   const { total } = summary;
@@ -24,7 +38,7 @@ export default function RiskDoughnut({ summary, selectedLevels, onToggleLevel, c
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => ` ${RISK[RISK_LEVELS[ctx.dataIndex]].icon} ${ctx.label}: ${fmtInt(ctx.parsed)} SV (${fmtPercent(share(ctx.parsed, total))})`,
+            label: (ctx) => ` ${ctx.label}: ${fmtInt(ctx.parsed)} (${fmtPercent(share(ctx.parsed, total))})`,
           },
         },
       },
@@ -32,6 +46,7 @@ export default function RiskDoughnut({ summary, selectedLevels, onToggleLevel, c
   }), [counts.join(","), selectedLevels.join(","), total]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onClick = (event) => {
+    if (!onToggleLevel) return;
     const [element] = getElementAtEvent(ref.current, event);
     if (element) onToggleLevel(RISK_LEVELS[element.index]);
   };
@@ -39,12 +54,12 @@ export default function RiskDoughnut({ summary, selectedLevels, onToggleLevel, c
   return (
     <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
       <div style={{ position: "relative", width: 176, height: 176, flex: "none" }}>
-        <Doughnut ref={ref} data={data} options={options} onClick={onClick} style={{ cursor: "pointer" }}
-          role="img" aria-label="Biểu đồ tỷ lệ sinh viên theo mức rủi ro" />
+        <Doughnut ref={ref} data={data} options={options} onClick={onClick} style={{ cursor: onToggleLevel ? "pointer" : "default" }}
+          role="img" aria-label="Biểu đồ tỷ lệ theo mức rủi ro" />
         <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", pointerEvents: "none", textAlign: "center" }}>
           <div>
             <div style={{ fontSize: 26, fontWeight: 650 }}>{fmtInt(total)}</div>
-            <div className="muted" style={{ fontSize: 12 }}>sinh viên</div>
+            <div className="muted" style={{ fontSize: 12 }}>{centerLabel}</div>
           </div>
         </div>
       </div>
@@ -52,28 +67,29 @@ export default function RiskDoughnut({ summary, selectedLevels, onToggleLevel, c
         {RISK_LEVELS.map((level, i) => {
           const active = selectedLevels.includes(level);
           return (
-            <button type="button" key={level} onClick={() => onToggleLevel(level)} aria-pressed={active}
-              style={{
-                display: "flex", width: "100%", justifyContent: "space-between", gap: 12, padding: "6px 8px", border: 0,
-                borderRadius: 6, background: active ? RISK[level].tint : "transparent", cursor: "pointer", font: "inherit", color: "inherit",
-              }}>
-              <span><span style={{ color: RISK[level].color }} aria-hidden>{RISK[level].icon}</span> {RISK[level].label}</span>
+            <button type="button" key={level} onClick={() => onToggleLevel?.(level)} aria-pressed={active}
+              disabled={!onToggleLevel} className="risk-legend-row"
+              style={{ background: active ? RISK[level].tint : "transparent", cursor: onToggleLevel ? "pointer" : "default" }}>
+              <span><span className="swatch" style={{ background: RISK[level].color }} aria-hidden />{RISK[level].label}</span>
               <span className="tabular"><b>{fmtInt(counts[i])}</b> <span className="muted">({fmtPercent(share(counts[i], total), 0)})</span></span>
             </button>
           );
         })}
-        <div className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 4 }}>Theo tiêu chí (nhấn để lọc):</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {Object.entries(CRITERIA).map(([key, label]) => (
-            <button type="button" key={key} onClick={() => onCriterion(criterion === key ? undefined : key)} aria-pressed={criterion === key}
-              style={{
-                border: "1px solid #d9d9d9", borderRadius: 999, padding: "2px 10px", cursor: "pointer", font: "inherit", fontSize: 12,
-                background: criterion === key ? "#1f2937" : "#fff", color: criterion === key ? "#fff" : "inherit",
-              }}>
-              {label} <b>{fmtInt(summary.by_criterion[key])}</b>
-            </button>
-          ))}
-        </div>
+        {summary.by_criterion && onCriterion && (
+          <>
+            <div className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 4 }}>Theo tiêu chí</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {Object.entries(CRITERIA).map(([key, label]) => (
+                <button type="button" key={key} onClick={() => onCriterion(criterion === key ? undefined : key)}
+                  aria-pressed={criterion === key} className={`chip${criterion === key ? " on" : ""}`}
+                  title={`Số sinh viên có điểm ${label.toLowerCase()} từ 1 (nhấn để lọc bảng)`}>
+                  {label} <b>{fmtInt(summary.by_criterion[key])}</b>
+                  {rule && <span className="chip-hint"> {thresholdHint(key, rule)}</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

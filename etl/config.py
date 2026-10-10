@@ -32,6 +32,25 @@ RISK_LEVEL_RULES: dict[str, int | bool] = dict(
 # risk_score = round(100 × (0.35·C1 + 0.30·C2 + 0.35·C3) / 2)
 RISK_WEIGHTS: dict[str, float] = dict(attendance=0.35, inactivity=0.30, assignment=0.35)
 
+# Giới hạn an toàn cho luật riêng của môn (kế hoạch v1.2 Mục 4.5) – nhà trường điều chỉnh tại đây.
+# (min, max) theo đơn vị lưu trữ: tỷ lệ 0–1 hoặc số ngày. Backend là chốt chặn cuối, giao diện đọc cùng giá trị qua API.
+RISK_RULE_BOUNDS: dict[str, tuple[float, float]] = {
+    "absence_yellow": (0.05, 0.60), "absence_red": (0.05, 0.90),
+    "missing_yellow": (0.05, 0.60), "missing_red": (0.05, 0.90),
+    "inactive_yellow_days": (3, 21), "inactive_red_days": (3, 42),
+    "low_access_ratio": (0.20, 0.80),
+    "weight": (0.10, 0.60),
+}
+RISK_MAX_EXTRA_RULES = 5
+# Luật bổ sung: tham số chính và khoảng cho phép
+RISK_EXTRA_RULE_LIMITS: dict[str, tuple[str, int, int]] = {
+    "consecutive_missing": ("count", 1, 10),
+    "absent_sessions": ("count", 1, 20),
+    "absence_rate": ("percent", 5, 80),
+    "inactive_days": ("days", 3, 42),
+    "missing_count": ("count", 1, 20),
+}
+
 # ----------------------------------------------------------------------------- trích xuất Moodle (SPEC 4.1, 4.2)
 MOODLE_STATEMENT_TIMEOUT_MS = 60_000     # an toàn cho CSDL Moodle
 ANALYTICS_STATEMENT_TIMEOUT_MS = 300_000
@@ -45,6 +64,8 @@ JOB_LOCK_KEYS: dict[str, int] = {        # khóa advisory trên CSDL analytics, 
     "traffic": 7_424_101,
     "course_progress": 7_424_102,
     "student_risk": 7_424_103,
+    "auto_prompt": 7_424_104,
+    "message_dispatch": 7_424_105,
 }
 RETRY_DELAYS_SECONDS = (60, 300, 900)    # thử lại 3 lần: 1 – 5 – 15 phút (chỉ khi chạy bằng scheduler)
 RISK_SNAPSHOT_RETENTION_DAYS = 180       # bảo trì: giữ snapshot cuối mỗi tuần với dữ liệu cũ hơn

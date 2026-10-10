@@ -17,6 +17,11 @@ from backend.app.repositories._sql import LEVEL_RANK, like_pattern, offset, orde
 from backend.app.repositories.admin import latest_courses_cte
 
 TEACHER_FILTER = "teacher_ids @> ARRAY[CAST(:teacher_id AS integer)]"
+
+
+def tf(teacher_id: int | None, alias: str = "") -> str:
+    """Điều kiện phân quyền giảng viên; teacher_id = None (quản trị viên xem chỉ đọc) -> không lọc."""
+    return f"{alias}{TEACHER_FILTER}" if teacher_id is not None else "TRUE"
 CRITERION_COLUMNS = {"attendance": "score_attendance", "inactivity": "score_inactivity",
                      "assignment": "score_assignment"}
 
@@ -45,14 +50,14 @@ def course_teacher_ids(conn: Connection, course_id: int, today: date) -> list[in
     return None if row is None else [int(t) for t in row["teacher_ids"]]
 
 
-def risk_snapshot_date(conn: Connection, course_id: int, teacher_id: int, today: date) -> date | None:
+def risk_snapshot_date(conn: Connection, course_id: int, teacher_id: int | None, today: date) -> date | None:
     return fetch_value(conn, f"""
         SELECT MAX(snapshot_date) FROM analytics.fact_student_risk_summary
-        WHERE course_id = :course_id AND snapshot_date <= :today AND {TEACHER_FILTER}""",
+        WHERE course_id = :course_id AND snapshot_date <= :today AND {tf(teacher_id)}""",
         {"course_id": course_id, "today": today, "teacher_id": teacher_id})
 
 
-def risk_summary(conn: Connection, course_id: int, teacher_id: int, snapshot_date: date) -> dict:
+def risk_summary(conn: Connection, course_id: int, teacher_id: int | None, snapshot_date: date) -> dict:
     return fetch_one(conn, f"""
         SELECT COUNT(*)                                            AS total,
                COUNT(*) FILTER (WHERE risk_level = 'RED')          AS red,
@@ -66,7 +71,7 @@ def risk_summary(conn: Connection, course_id: int, teacher_id: int, snapshot_dat
                COUNT(*) FILTER (WHERE score_assignment = 2)        AS assignment_red,
                COUNT(*) FILTER (WHERE attendance_status = 'NO_DATA') AS attendance_no_data
         FROM analytics.fact_student_risk_summary
-        WHERE course_id = :course_id AND snapshot_date = :snapshot_date AND {TEACHER_FILTER}""",
+        WHERE course_id = :course_id AND snapshot_date = :snapshot_date AND {tf(teacher_id)}""",
         {"course_id": course_id, "snapshot_date": snapshot_date, "teacher_id": teacher_id})
 
 
@@ -85,13 +90,14 @@ STUDENT_LIST_COLUMNS = """user_id, student_code, student_name, email, risk_level
        score_attendance, score_inactivity, score_assignment,
        total_sessions, attended_sessions, absent_sessions, absence_rate, attendance_status,
        total_assignments, submitted_assignments, missing_assignments_count, late_submissions, completion_rate,
-       total_access_count, access_count_7d, access_count_14d, last_access_time, days_since_last_access"""
+       total_access_count, access_count_7d, access_count_14d, last_access_time, days_since_last_access,
+       max_consecutive_missing, rule_set_id"""
 
 
-def students(conn: Connection, course_id: int, teacher_id: int, snapshot_date: date, *,
+def students(conn: Connection, course_id: int, teacher_id: int | None, snapshot_date: date, *,
              risk_levels: list[str], criterion: str | None, search: str | None,
              sort: str, order: str, page: int, page_size: int) -> tuple[list[dict], int]:
-    conditions = ["course_id = :course_id", "snapshot_date = :snapshot_date", TEACHER_FILTER]
+    conditions = ["course_id = :course_id", "snapshot_date = :snapshot_date", tf(teacher_id)]
     params: dict = {"course_id": course_id, "snapshot_date": snapshot_date, "teacher_id": teacher_id}
     if risk_levels:
         conditions.append("risk_level = ANY(CAST(:levels AS text[]))")
@@ -119,20 +125,23 @@ def students(conn: Connection, course_id: int, teacher_id: int, snapshot_date: d
     return items, total
 
 
-def student_detail(conn: Connection, course_id: int, user_id: int, teacher_id: int, snapshot_date: date) -> dict | None:
+def student_detail(conn: Connection, course_id: int, user_id: int, teacher_id: int | None,
+                   snapshot_date: date) -> dict | None:
     return fetch_one(conn, f"""
         SELECT snapshot_date, course_id, course_shortname, course_fullname, faculty_name, academic_year, semester,
-               {STUDENT_LIST_COLUMNS}, active_actions, weekly_activity, assignment_detail, class_avg_access, updated_at
+               {STUDENT_LIST_COLUMNS}, active_actions, weekly_activity, assignment_detail, class_avg_access,
+               attendance_detail, updated_at
         FROM analytics.fact_student_risk_summary
-        WHERE course_id = :course_id AND user_id = :user_id AND snapshot_date = :snapshot_date AND {TEACHER_FILTER}""",
+        WHERE course_id = :course_id AND user_id = :user_id AND snapshot_date = :snapshot_date AND {tf(teacher_id)}""",
         {"course_id": course_id, "user_id": user_id, "snapshot_date": snapshot_date, "teacher_id": teacher_id})
 
 
-def risk_history(conn: Connection, course_id: int, user_id: int, teacher_id: int, today: date) -> list[dict]:
+def risk_history(conn: Connection, course_id: int, user_id: int, teacher_id: int | None,
+                 today: date) -> list[dict]:
     return fetch_all(conn, f"""
         SELECT snapshot_date AS date, risk_level, risk_score, score_attendance, score_inactivity, score_assignment
         FROM analytics.fact_student_risk_summary
-        WHERE user_id = :user_id AND course_id = :course_id AND snapshot_date <= :today AND {TEACHER_FILTER}
+        WHERE user_id = :user_id AND course_id = :course_id AND snapshot_date <= :today AND {tf(teacher_id)}
         ORDER BY snapshot_date""",
         {"course_id": course_id, "user_id": user_id, "teacher_id": teacher_id, "today": today})
 
@@ -141,7 +150,7 @@ def interventions(conn: Connection, course_id: int, user_id: int) -> list[dict]:
     """Can thiệp của mọi GV trong môn với SV (GV đồng giảng dạy thấy được lịch sử của nhau)."""
     return fetch_all(conn, """
         SELECT i.id, i.action_type, i.content, i.risk_level_at_time, i.created_at,
-               i.teacher_id, u.full_name AS teacher_name
+               i.teacher_id, u.full_name AS teacher_name, i.origin, i.outbound_id
         FROM analytics.intervention_log i
         LEFT JOIN analytics.app_user u ON u.user_id = i.teacher_id
         WHERE i.course_id = :course_id AND i.user_id = :user_id
@@ -208,21 +217,22 @@ def progress_weekly(conn: Connection, course_id: int, teacher_id: int, today: da
         {"course_id": course_id, "today": today, "teacher_id": teacher_id})
 
 
-def compare(conn: Connection, course_id: int, user_id: int, teacher_id: int, snapshot_date: date) -> dict | None:
+def compare(conn: Connection, course_id: int, user_id: int, teacher_id: int | None, snapshot_date: date) -> dict | None:
     """
     Chỉ số của SV so với lớp tại cùng snapshot. Tỷ lệ nộp bài / chuyên cần / hoàn thành của lớp lấy từ
     fact_course_progress_daily cùng ngày để khớp với trang Tiến độ lớp.
+    teacher_id = None: quản trị viên xem (trang Môn học chỉ đọc) – không lọc theo giảng viên.
     """
     return fetch_one(conn, f"""
         WITH cls AS (
             SELECT ROUND(AVG(access_count_14d), 2)   AS access_14d,
                    ROUND(AVG(total_access_count), 2) AS total_access
             FROM analytics.fact_student_risk_summary
-            WHERE course_id = :course_id AND snapshot_date = :snapshot_date AND {TEACHER_FILTER}
+            WHERE course_id = :course_id AND snapshot_date = :snapshot_date AND {tf(teacher_id)}
         ), progress AS (
             SELECT assignment_submission_rate, attendance_rate, avg_completion_rate
             FROM analytics.fact_course_progress_daily
-            WHERE course_id = :course_id AND stat_date <= :snapshot_date AND {TEACHER_FILTER}
+            WHERE course_id = :course_id AND stat_date <= :snapshot_date AND {tf(teacher_id)}
             ORDER BY stat_date DESC LIMIT 1
         )
         SELECT s.access_count_14d, s.total_access_count, s.total_assignments, s.total_sessions,
@@ -239,5 +249,42 @@ def compare(conn: Connection, course_id: int, user_id: int, teacher_id: int, sna
         CROSS JOIN cls
         LEFT JOIN progress p ON TRUE
         WHERE s.course_id = :course_id AND s.user_id = :user_id AND s.snapshot_date = :snapshot_date
-          AND s.{TEACHER_FILTER}""",
+          AND {tf(teacher_id, "s.")}""",
         {"course_id": course_id, "user_id": user_id, "snapshot_date": snapshot_date, "teacher_id": teacher_id})
+
+
+COMPARE_METRICS = (
+    ("access_14d", "Truy cập 14 ngày", "lượt", "access_count_14d", "class_access_14d"),
+    ("total_access", "Tổng lượt truy cập", "lượt", "total_access_count", "class_total_access"),
+    ("submission_rate", "Tỷ lệ nộp bài", "%", "submission_rate", "class_submission_rate"),
+    ("attendance_rate", "Chuyên cần", "%", "attendance_rate", "class_attendance_rate"),
+    ("completion_rate", "Hoàn thành hoạt động", "%", "completion_rate", "class_completion_rate"),
+)
+
+
+def compare_metrics(row: dict) -> list[dict]:
+    """Các cặp (sinh viên, trung bình lớp) cho biểu đồ so sánh – dùng chung cho giảng viên và quản trị viên."""
+    return [dict(key=k, label=label, unit=unit, student=row[s_col], class_avg=row[c_col])
+            for k, label, unit, s_col, c_col in COMPARE_METRICS]
+
+
+def counts_at(conn: Connection, course_id: int, teacher_id: int | None, day: date) -> dict | None:
+    """Số Đỏ/Vàng/Xanh của snapshot mới nhất không muộn hơn `day` (dòng "so với tuần trước")."""
+    snap = risk_snapshot_date(conn, course_id, teacher_id, day)
+    if snap is None:
+        return None
+    row = fetch_one(conn, f"""
+        SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE risk_level = 'RED') AS red,
+               COUNT(*) FILTER (WHERE risk_level = 'YELLOW') AS yellow,
+               COUNT(*) FILTER (WHERE risk_level = 'GREEN') AS green
+        FROM analytics.fact_student_risk_summary
+        WHERE course_id = :course_id AND snapshot_date = :d AND {tf(teacher_id)}""",
+        {"course_id": course_id, "d": snap, "teacher_id": teacher_id})
+    return {"snapshot_date": snap, **row}
+
+
+def course_term(conn: Connection, course_id: int, today: date) -> tuple[str, int] | None:
+    row = fetch_one(conn, """SELECT academic_year, semester FROM analytics.fact_course_progress_daily
+                             WHERE course_id = :c AND stat_date <= :today ORDER BY stat_date DESC LIMIT 1""",
+                    {"c": course_id, "today": today})
+    return (str(row["academic_year"]), int(row["semester"])) if row else None

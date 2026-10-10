@@ -153,6 +153,20 @@ def test_foreign_keys(db):
         ("analytics.fact_server_traffic_hourly", "analytics.etl_run_log"),
         ("analytics.etl_online_snapshot", "analytics.etl_run_log"),
         ("analytics.intervention_log", "analytics.app_user"),
+        # v1.2 – luật cảnh báo theo môn (V009)
+        ("analytics.risk_rule_set", "analytics.app_user"),
+        ("analytics.fact_student_risk_summary", "analytics.risk_rule_set"),
+        ("analytics.fact_course_progress_daily", "analytics.risk_rule_set"),
+        # v1.2 – trung tâm can thiệp và kênh gửi tin (V010, V011)
+        ("analytics.message_template", "analytics.app_user"),
+        ("analytics.auto_prompt_rule", "analytics.app_user"),
+        ("analytics.auto_prompt_rule", "analytics.message_template"),
+        ("analytics.outbound_message", "analytics.app_user"),
+        ("analytics.outbound_message", "analytics.auto_prompt_rule"),
+        ("analytics.outbound_message", "analytics.message_template"),
+        ("analytics.outbound_message", "analytics.intervention_log"),
+        ("analytics.intervention_log", "analytics.outbound_message"),
+        ("analytics.channel_check", "analytics.app_user"),
     }
 
 

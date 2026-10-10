@@ -58,15 +58,17 @@ export default function AdminTraffic() {
 
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} xl={6}>
-          <KpiCard label={<>Online hiện tại<span className="live-dot" aria-hidden /></>} loading={!rt} value={fmtInt(rt?.current_online)}
-            hint={rt?.current_online_at ? `Mẫu lúc ${fmtHour(rt.current_online_at)} · tự làm mới mỗi 60 giây` : "Chưa có mẫu"} />
+          <KpiCard label="Online hiện tại" loading={!rt} value={fmtInt(rt?.current_online)}
+            hint={rt?.current_online_at ? `lúc ${fmtHour(rt.current_online_at)}` : "Chưa có mẫu"}
+            detail="Số người dùng có hoạt động trong 5 phút gần nhất; tự làm mới mỗi 60 giây" />
         </Col>
         <Col xs={24} sm={12} xl={6}>
-          <KpiCard label="Requests hôm nay" loading={!rt} value={fmtInt(rt?.requests_so_far)} hint={rt ? `Giờ hiện tại (${fmtHour(rt.current_hour)}): ${fmtInt(rt.requests_current_hour)}` : undefined} />
+          <KpiCard label="Requests hôm nay" loading={!rt} value={fmtInt(rt?.requests_so_far)} hint={rt ? `giờ này ${fmtInt(rt.requests_current_hour)}` : undefined}
+            detail={rt ? `Tính từ 00:00 tới hiện tại; riêng giờ ${fmtHour(rt.current_hour)} có ${fmtInt(rt.requests_current_hour)} requests` : undefined} />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <KpiCard label="Giờ đông nhất trong khoảng" loading={!stats && hourly.isLoading}
-            value={stats ? `${fmtInt(stats.peak.total_requests)} req` : "–"} hint={stats ? `▲ ${fmtDateTime(stats.peak.stat_hour)}` : undefined} />
+            value={stats ? `${fmtInt(stats.peak.total_requests)} req` : "–"} hint={stats ? `lúc ${fmtDateTime(stats.peak.stat_hour)}` : undefined} />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <KpiCard label="Online trung bình trong khoảng" loading={!stats && hourly.isLoading}

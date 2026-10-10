@@ -1,0 +1,15 @@
+{
+  "university": "Trường Đại học Đà Lạt",
+  "faculty": "Khoa Công nghệ Thông tin",
+  "kind": "Báo cáo đồ án môn học",
+  "subject": "Phân tích và thiết kế phần mềm",
+  "title": ["Trực quan hóa dữ liệu hệ thống LMS Moodle", "phục vụ công tác quản lý", "và hỗ trợ giảng dạy"],
+  "advisor": "[CẦN BỔ SUNG – họ tên giảng viên hướng dẫn]",
+  "class": "[CẦN BỔ SUNG – mã lớp học phần]",
+  "members": [
+    { "name": "Nguyễn Thăng Thiêng", "id": "2312755" },
+    { "name": "Nguyễn Ngọc Bảo Thịnh", "id": "2312757" },
+    { "name": "Chung Thiện Ý", "id": "2312804" }
+  ],
+  "place_date": "Đà Lạt, tháng 10 năm 2026"
+}

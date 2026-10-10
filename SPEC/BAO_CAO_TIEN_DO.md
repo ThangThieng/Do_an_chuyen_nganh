@@ -2,7 +2,7 @@
 
 > Đề tài: Trực quan hóa dữ liệu hệ thống LMS Moodle phục vụ công tác quản lý và hỗ trợ giảng dạy
 > Kế hoạch gốc: [KE_HOACH_TRIEN_KHAI.md](KE_HOACH_TRIEN_KHAI.md) (v1.0 – 14/09/2026)
-> Cập nhật: 15/09/2026
+> Cập nhật: 01/10/2026 (phiên bản 1.1 – bổ sung nhánh Hệ thống, Danh mục, Trợ giúp; báo cáo môn học)
 > Trạng thái: **Đã hoàn thành Bước 1 (CSDL phân tích), Bước 2 (Mock data + ETL), Bước 3 (Backend API), Bước 4 (Frontend) và Phần 6 (kiểm thử, hiệu năng, E2E, triển khai Docker).** Còn lại phần cần người thật tham gia: khảo sát ý kiến giảng viên (UAT), viết báo cáo, slide và video demo.
 
 ---
@@ -23,12 +23,14 @@
 | **Hiệu năng tải lớn (6.2)** | EXPLAIN x1/x10, Locust 50 người dùng, Lighthouse, đo ETL và export | Đã đo đủ; dữ liệu x10 dựng riêng (1,46 triệu dòng) và Moodle 2.000 SV cho ETL | ✅ Xong |
 | **E2E, phân quyền, responsive, WCAG (6.3)** | Playwright, kiểm tra 403/401, 4 kích thước màn hình | 27 test chạy trên bản Docker, kèm axe-core cho WCAG 2.1 AA | ✅ Xong |
 | **Triển khai (6.4)** | Docker Compose, Nginx, script, README chạy demo | 5 dịch vụ, một lệnh `docker compose up`, README hướng dẫn | ✅ Xong |
-| UAT với giảng viên, báo cáo, slide, video (6.1, 6.5) | – | Cần người thật tham gia | ⏳ Chưa làm |
+| **Phiên bản 1.1 (01/10/2026)** | – | Đổi mật khẩu, quản lý người dùng, nhật ký ETL, danh mục môn học, sao lưu/phục hồi, trang Trợ giúp, menu 5 nhánh; migration V008 | ✅ Xong (xem mục 2.10) |
+| Báo cáo môn Phân tích và thiết kế phần mềm | – | `docs/bao_cao/BaoCao_PTTK_LMS_Analytics.docx` (78 trang) + sơ đồ UML/DFD trong `docs/diagrams` | ✅ Xong (còn thiếu GVHD, lớp, bảng phân công) |
+| UAT với giảng viên, slide, video (6.1, 6.5) | – | Cần người thật tham gia | ⏳ Chưa làm |
 
-**Kiểm thử hiện tại, tất cả đều pass:**
-- 248 test Python (CSDL, ETL, mock, tích hợp, API, bảo mật)
+**Kiểm thử hiện tại (01/10/2026, phiên bản 1.1), tất cả đều pass:**
+- 284 test Python (CSDL, ETL, mock, tích hợp, API, bảo mật, hệ thống/sao lưu)
 - 8 test Frontend (vitest)
-- 27 test E2E Playwright chạy trên bản Docker (luồng nghiệp vụ, phân quyền, responsive, WCAG)
+- 32 test E2E Playwright, đạt trên cả Vite dev server và bản Docker 1.1 (nâng cấp tại chỗ và cài mới)
 - Kiểm tra nhanh giao diện bằng trình duyệt thật: 11 bước
 
 Số liệu hiệu năng đầy đủ: [docs/KET_QUA_KIEM_THU.md](../docs/KET_QUA_KIEM_THU.md). Tài liệu tổng hợp toàn hệ thống (kiến trúc, CSDL, cách dùng web, minh chứng trực quan hóa): [docs/TAI_LIEU_HE_THONG.md](../docs/TAI_LIEU_HE_THONG.md).
@@ -266,6 +268,42 @@ Mã nguồn trong `frontend/` ([frontend/README.md](../frontend/README.md)). Th�
 
 ---
 
+### 2.10 Phiên bản 1.1 – bổ sung để hệ thống có đủ 5 nhánh thực đơn (01/10/2026)
+
+Khi đối chiếu hệ thống với khung lý thuyết OOAD của môn học (cấu trúc thực đơn Hệ thống / Danh mục / Nghiệp vụ / Báo cáo / Trợ giúp; yêu cầu an toàn, bảo mật), các chức năng quản trị còn thiếu đã được bổ sung. **Không thay đổi biểu đồ hay chỉ số nào của đề tài.**
+
+| # | Bổ sung | Chi tiết |
+|---|---|---|
+| 58 | Migration V008 | `app_user.password_changed_at` (token cấp trước thời điểm này bị từ chối), `app_user.last_login_at` |
+| 59 | Đổi mật khẩu | `POST /auth/change-password`; ≥ 8 ký tự, có chữ và số; trả token mới, các phiên khác mất hiệu lực. Màn hình Tài khoản |
+| 60 | Quản lý người dùng | `GET /admin/users`, `POST /admin/users/{id}/active`, `POST /admin/users/{id}/reset-password` (mật khẩu tạm 12 ký tự, hiện một lần). Không tự khóa/tự đặt lại chính mình (409). Tạo tài khoản vẫn qua `cli sync-users` vì `user_id` phải bằng `mdl_user.id` |
+| 61 | Nhật ký ETL | `GET /admin/etl/runs` (lọc job, trạng thái) + màn hình |
+| 62 | Danh mục môn học | `GET /admin/catalog/courses` – chỉ tra cứu, danh mục do Moodle quản lý |
+| 63 | Sao lưu & phục hồi | `backend/app/services/backup.py`: zip gồm CSV từng bảng (COPY) + `manifest.json`; phục hồi trong một giao dịch, từ chối khi khác phiên bản migration hoặc số dòng không khớp; khóa advisory chống chạy chồng. API `/admin/backups*`, CLI `backup`, `list-backups`, `restore`. Không dùng `pg_dump` để không phụ thuộc phiên bản công cụ PostgreSQL trên máy chạy API. Đo trên dữ liệu demo: sao lưu 2,2 s (18,2 MB), phục hồi 38,4 s |
+| 64 | Trợ giúp | Hướng dẫn theo vai trò, luật xếp mức, giới thiệu hệ thống |
+| 65 | Menu | Admin: Tổng quan · Lưu lượng · Báo cáo · Danh mục · Hệ thống ▾ · Trợ giúp; menu tài khoản có "Tài khoản & đổi mật khẩu". Giảng viên giữ môn đang xem gần nhất khi ở trang Trợ giúp/Tài khoản |
+| 66 | Docker | Volume `backups`, `BACKEND_BACKUP_DIR=/app/backups`, Nginx `proxy_read_timeout 600s` cho `/api/v1/admin/backups`. Đã dựng và chạy thật 01/10: nâng cấp tại chỗ (V008 áp dụng trên dữ liệu cũ) và cài mới từ volume trống (201 s, backfill 146 s); 32/32 E2E đạt ở cả hai |
+| 67 | Kiểm thử | +36 pytest (`test_system_api.py`, `test_backup_service.py` – khứ hồi sao lưu/phục hồi so sánh MD5 cả 8 bảng), +5 E2E (`system.spec.js`) |
+| 67b | Lỗi phát hiện khi chạy trên Docker | Phục hồi qua API bị chờ khóa 30 s rồi lỗi 500: giao dịch đọc `app_user` của bước xác thực còn mở nên `TRUNCATE` phải chờ. Sửa: `get_current_user` kết thúc giao dịch ngay sau khi đọc; lỗi chờ khóa trả 409. Thêm `test_restore_via_api` (đã kiểm chứng test hỏng khi bỏ bản sửa). Phục hồi trên Docker: 14,7 s |
+| 68 | Báo cáo môn học | `docs/bao_cao/` (nội dung Markdown + `build_report.js` + `finalize_word.ps1`), sơ đồ PlantUML/DFD trong `docs/diagrams`, ảnh màn hình `docs/images/report` (`frontend/e2e/report_shots.mjs`) |
+
+### 2.11 Phiên bản 1.2 – góp ý giao diện, luật cảnh báo theo môn, trung tâm can thiệp, dữ liệu 5 khoa (10/10/2026)
+
+Thực hiện theo [kế hoạch v1.2](../docs/gop_y_giao_dien/TongHop_GopY_GiaoDien_va_KeHoach_v1.2.docx) (G0–G8). Kết quả đo:
+[KET_QUA_KIEM_THU.md mục 5c](../docs/KET_QUA_KIEM_THU.md).
+
+| # | Hạng mục (giai đoạn) | Chi tiết |
+|---|---|---|
+| 69 | Dữ liệu 5 khoa (G1) | Moodle V005 (bảng nhắn tin Moodle 3.9, `mdl_user_preferences`); `mockdata/config.py` khai báo `FACULTIES`; 58 môn, 3.000 SV, 28 GV, tài khoản dịch vụ `lmsanalytics`; sinh 6,9 phút, backfill 31,4 phút. Sinh vào đúng hai CSDL cũ `moodle_src`, `lms_analytics` |
+| 70 | CSDL phân tích & ETL (G2) | V009 (lịch học kỳ, bộ luật `risk_rule_set`, `rule_set_id` từng dòng, chi tiết điểm danh theo hoạt động, bỏ nộp liên tiếp, GV chính), V010 (mẫu tin, quy tắc nhắc, hàng đợi `outbound_message`), V011 (kết quả kiểm tra kênh), V012 (khóa ngoại tham chiếu chéo DEFERRABLE), V013 (ngày bắt đầu môn), V014 (chỉ mục phủ). ETL chấm theo luật của từng môn; tự phát hành phiên bản luật GLOBAL khi `etl/config.py` đổi; giới hạn an toàn khai báo trong `etl/config.py` |
+| 71 | API (G3) | `/admin/compare/faculties`, `/admin/risk-trend`, trang Môn học chỉ đọc của Admin (`/admin/courses/{id}/…` gồm so sánh với lớp), `/meta/metrics|risk-rule|freshness|channels`; mở rộng KPI, trang Khoa, risk-summary (chỉ thêm trường) |
+| 72 | Chức năng 1 (G4) | Luật theo môn: GET/preview/PUT/DELETE, chấm lại snapshot hôm nay bằng đúng hàm ETL; màn hình Thiết lập cảnh báo; cột "Luật cảnh báo" ở trang Khoa và Danh mục (kèm GV chính/trợ giảng) |
+| 73 | Hạ tầng gửi tin (G5) | `common/messaging` (cấu hình + chốt chặn 3 điều kiện, mẫu tin, SMTP/file .eml, Moodle REST, hàng đợi chống trùng, thử lại 1–5–15 phút); máy chủ Moodle 3.9 mô phỏng `tools/moodle_ws_stub` (hộp tin `/stub/inbox`); job `auto_prompt`, `message_dispatch`; `cli messaging-check`; `lms.ps1 moodle-stub | etl | messaging-check`; dịch vụ `moodle-stub` trong Docker |
+| 74 | Chức năng 2 (G6) | Trung tâm Can thiệp (Cần liên hệ, Đã gửi kèm mã xác nhận và liên kết hộp tin, Nhắc tự động, Mẫu tin), trình soạn tin trong cửa sổ chi tiết, trang Hệ thống › Kênh gửi tin |
+| 75 | Giao diện chung (G7) | Bỏ icon/thông tin gây nhiễu; Tổng quan Macro (tròn + xu hướng, so sánh khoa, tô nổi khoa theo mức), trang Khoa, trang Môn học, cấp Sinh viên trên URL (`?student=`), ngăn "Nguồn & cách tính", phân tích điểm rủi ro, Trợ giúp đọc luật từ API |
+| 76 | Kiểm thử & tài liệu (G8) | pytest @@PYTEST@@ · vitest 10 · E2E 57 (gồm WCAG 14 màn hình, responsive 7 trang × 4 độ rộng) · EXPLAIN 94 câu ≤ 8,9 ms · Locust p95 28 ms/0 lỗi · ảnh chụp mới `docs/images/report` · README, TAI_LIEU_HE_THONG, KET_QUA_KIEM_THU cập nhật |
+| 77 | Lỗi tìm ra khi kiểm thử v1.2 (đã sửa) | Trang Khoa lỗi SQL; sao lưu thiếu 6 bảng mới + phục hồi chậm; máy chủ Moodle mô phỏng lỗi 500 với POST (thiếu `python-multipart`); "sinh viên duy nhất" quét toàn bảng (700 ms → 7 ms); trình soạn tin gọi xem trước rỗng sau khi gửi; thông báo che menu; nhiều lỗi tương phản/nhãn WCAG và lỗi bố cục ở 390 px |
+
 ## 3. NHỮNG THAY ĐỔI SO VỚI KẾ HOẠCH VÀ LÝ DO
 
 ### 3.1 Môi trường & công nghệ
@@ -399,6 +437,8 @@ Số liệu đầy đủ trong [docs/KET_QUA_KIEM_THU.md](../docs/KET_QUA_KIEM_T
 | Hạng mục | Tham chiếu kế hoạch | Ghi chú |
 |---|---|---|
 | Khảo sát ý kiến giảng viên (UAT), báo cáo, slide, video demo | 6.1, 6.5 | Cần người thật tham gia |
+| Chứng minh gửi tin mức 4 (SMTP/Moodle thật) | v1.2 – 5.11, G8-4 | Cần tài khoản thư/token Moodle do nhóm hoặc trường cấp |
+| E2E trên bản Docker v1.2, đo lại bộ x10 | v1.2 – 7.7 | E2E v1.2 đã chạy trên Vite dev server; x10 cần thêm ~12–15 GB đĩa |
 | Lighthouse chính thức | 6.2 | Trang cần đăng nhập nên đang đo bằng Playwright (LCP, TBT, TTI xấp xỉ) |
 | Giảm dung lượng gói Frontend | 6.2 | Gói chính 924 KB (gzip 299 KB), chủ yếu là Ant Design. Trên máy CPU chậm 4× thì biểu đồ đầu tiên mất 1,4–2,1 giây (máy bình thường: 0,34–0,41 giây) |
 | Đo hiệu năng trên máy chủ riêng | 6.2 | Hiện Locust và API chạy cùng một máy nên số đo là cận trên |

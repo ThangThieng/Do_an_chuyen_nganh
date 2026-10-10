@@ -21,6 +21,19 @@ perf/.work/
 logs/
 *.log
 mockdata/output/
+backups/
 
 # Cấu hình Claude Code cục bộ
 .claude/
+
+# Email ghi file ở chế độ demo offline (chứa dữ liệu sinh viên)
+var/
+
+# File rác / bản sao lưu tài liệu
+*.rar
+*_ban_truoc_khi_sua.*
+~$*
+
+# Bài báo tham khảo của bên thứ ba (có bản quyền) – chỉ giữ đề bài
+SPEC/*.pdf
+!SPEC/yeu_cau_xay_dung_web_truc_quan_hoa_lms.pdf

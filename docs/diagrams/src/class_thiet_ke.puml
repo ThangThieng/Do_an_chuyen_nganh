@@ -1,0 +1,135 @@
+@startuml class_thiet_ke
+!include _style.iuml
+skinparam classAttributeIconSize 0
+
+package "backend.app.core" {
+  class BackendSettings <<dataclass>> {
+    + jwt_secret : str
+    + jwt_expire_minutes : int = 480
+    + login_max_failures : int = 5
+    + login_window_seconds : int = 300
+    + pdf_max_rows : int = 5000
+    + excel_max_rows : int = 200000
+    + backup_dir : str
+  }
+  class CurrentUser <<dataclass>> {
+    + user_id : int
+    + username : str
+    + full_name : str
+    + email : str
+    + role : str
+  }
+  class LoginRateLimiter {
+    - max_failures : int
+    - window : int
+    - _failures : dict
+    + retry_after(ip, username) : int
+    + record_failure(ip, username)
+    + reset(ip, username)
+  }
+}
+package "backend.app.repositories" {
+  class ReportFilters <<dataclass>> {
+    + report_type : str
+    + academic_year : str
+    + semester : int
+    + faculty_id : int
+    + course_id : int
+    + risk_level : str
+    + from_date : date
+    + to_date : date
+    + teacher_id : int
+  }
+  class ReportQuery <<dataclass>> {
+    + sql : str
+    + order : str
+    + params : dict
+  }
+  class Column <<dataclass>> {
+    + key : str
+    + title : str
+    + kind : str
+    + width : float
+  }
+}
+package "backend.app.routers" {
+  class CourseAccess <<dataclass>> {
+    + course_id : int
+    + teacher_id : int
+  }
+}
+package "backend.app.services.backup" {
+  class BackupInfo <<dataclass>> {
+    + name : str
+    + size_bytes : int
+    + created_at : str
+    + created_by : str
+    + migration_version : int
+    + total_rows : int
+    + tables : dict
+    + to_dict() : dict
+  }
+  class BackupError <<exception>>
+  class BackupBusy <<exception>>
+  class BackupNotFound <<exception>>
+}
+package "backend.app.schemas (Pydantic)" {
+  class BaseModel
+  class Stamped {
+    + data_updated_at : datetime
+  }
+  class "ItemList[T]" as ItemList {
+    + items : list[T]
+  }
+  class "Page[T]" as Page {
+    + items : list[T]
+    + total : int
+    + page : int
+    + page_size : int
+  }
+  class KpisOut
+  class RiskStudentsOut
+  class BackupListOut
+}
+package "etl" {
+  class JobContext <<dataclass>> {
+    + job_name : str
+    + run_id : int
+    + as_of : datetime
+    + moodle : Engine
+    + analytics : Engine
+  }
+  class JobStats <<dataclass>> {
+    + rows_extracted : int
+    + rows_loaded : int
+    + __add__(other) : JobStats
+  }
+  class CourseDataset <<dataclass>> {
+    + as_of : datetime
+    + courses : DataFrame
+    + enrolments : DataFrame
+    + interaction : DataFrame
+    + attendance : DataFrame
+    + assignments : DataFrame
+    + completion : DataFrame
+    + course_ids : list[int]
+  }
+  class SqlLibrary {
+    - directory : Path
+    + get(name) : str
+  }
+}
+BaseModel <|-- Stamped
+Stamped <|-- ItemList
+Stamped <|-- Page
+Stamped <|-- KpisOut
+Page <|-- RiskStudentsOut
+Stamped <|-- BackupListOut
+BackupError <|-- BackupBusy
+BackupError <|-- BackupNotFound
+ReportFilters ..> ReportQuery : build_query() tạo ra
+ReportQuery ..> Column : report_columns()
+BackupListOut ..> BackupInfo
+JobContext ..> JobStats : work(ctx) trả về
+CourseDataset ..> SqlLibrary : tạo từ SQL do SqlLibrary nạp
+@enduml

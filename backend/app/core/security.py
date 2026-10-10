@@ -3,6 +3,7 @@ Xác thực & phân quyền (SPEC 5.1, 6.3):
   - Mật khẩu băm bcrypt.
   - JWT HS256 (PyJWT) mang sub = app_user.user_id (= mdl_user.id) và role; hết hạn -> 401.
   - Mỗi request nạp lại app_user để tài khoản bị khóa/đổi vai trò mất quyền ngay, không chờ token hết hạn.
+  - Token phát hành trước lần đổi/đặt lại mật khẩu gần nhất (password_changed_at) bị từ chối.
   - require_role(...) -> 403 khi sai vai trò.
   - Giới hạn đăng nhập sai: quá N lần trong cửa sổ thời gian theo (IP, username) -> 429.
 """
@@ -26,6 +27,7 @@ from backend.app.core.db import fetch_one, get_conn
 ROLE_ADMIN = "ADMIN"
 ROLE_TEACHER = "TEACHER"
 BCRYPT_MAX_BYTES = 72
+MIN_PASSWORD_LENGTH = 8
 
 _bearer = HTTPBearer(auto_error=False)
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
@@ -90,6 +92,25 @@ def decode_token(token: str) -> dict:
                             headers=_UNAUTHORIZED_HEADERS) from exc
 
 
+def token_revoked(payload: dict, password_changed_at: datetime | None) -> bool:
+    """iat của JWT tính bằng giây nguyên -> so với password_changed_at đã làm tròn xuống giây,
+    để token cấp ngay sau khi đổi mật khẩu (cùng giây) vẫn hợp lệ."""
+    if password_changed_at is None:
+        return False
+    return int(payload["iat"]) < int(password_changed_at.timestamp())
+
+
+def validate_new_password(password: str) -> str | None:
+    """Trả về thông báo lỗi nếu mật khẩu mới không đạt yêu cầu, None nếu hợp lệ."""
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f"Mật khẩu phải có ít nhất {MIN_PASSWORD_LENGTH} ký tự"
+    if len(password.encode("utf-8")) > BCRYPT_MAX_BYTES:
+        return f"Mật khẩu dài quá {BCRYPT_MAX_BYTES} byte"
+    if not any(ch.isalpha() for ch in password) or not any(ch.isdigit() for ch in password):
+        return "Mật khẩu phải có cả chữ và số"
+    return None
+
+
 def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
                      conn: Connection = Depends(get_conn)) -> CurrentUser:
     if credentials is None or credentials.scheme.lower() != "bearer":
@@ -99,10 +120,16 @@ def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(
         user_id = int(payload["sub"])
     except (TypeError, ValueError) as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token không hợp lệ", headers=_UNAUTHORIZED_HEADERS) from exc
-    row = fetch_one(conn, """SELECT user_id, username, full_name, email, role, is_active
+    row = fetch_one(conn, """SELECT user_id, username, full_name, email, role, is_active, password_changed_at
                              FROM analytics.app_user WHERE user_id = :uid""", {"uid": user_id})
+    # Kết thúc giao dịch đọc ngay: không giữ khóa ACCESS SHARE trên app_user suốt request
+    # (phục hồi dữ liệu cần TRUNCATE app_user, sẽ phải chờ khóa này nếu giao dịch còn mở)
+    conn.rollback()
     if row is None or not row["is_active"]:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Tài khoản không tồn tại hoặc đã bị khóa",
+                            headers=_UNAUTHORIZED_HEADERS)
+    if token_revoked(payload, row["password_changed_at"]):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Mật khẩu đã thay đổi, vui lòng đăng nhập lại",
                             headers=_UNAUTHORIZED_HEADERS)
     return CurrentUser(user_id=row["user_id"], username=row["username"], full_name=row["full_name"],
                        email=row["email"], role=row["role"])

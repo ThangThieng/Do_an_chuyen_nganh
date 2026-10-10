@@ -17,7 +17,9 @@ bcrypt>=4.2,<5
 cachetools>=5.5,<6
 openpyxl>=3.1,<3.2
 reportlab>=4.2,<5
+httpx>=0.27,<0.28          # gọi Moodle Web Service (Trung tâm can thiệp) + TestClient của FastAPI
+python-multipart>=0.0.9,<0.1   # đọc form x-www-form-urlencoded của Moodle REST (máy chủ Moodle mô phỏng tools/moodle_ws_stub)
 
 # ---- Kiểm thử ----
 pytest>=8.3
-httpx>=0.27,<0.28          # TestClient của FastAPI
+aiosmtpd>=1.4,<2          # máy chủ SMTP cục bộ trong kiểm thử gửi email (chứng minh mức 1)

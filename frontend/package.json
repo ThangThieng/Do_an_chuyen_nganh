@@ -1,7 +1,7 @@
 {
   "name": "lms-analytics-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Dashboard trực quan hóa dữ liệu LMS Moodle (SPEC 5.2–5.5)",
   "scripts": {

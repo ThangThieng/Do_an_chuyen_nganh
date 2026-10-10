@@ -1,0 +1,37 @@
+@startuml seq_dang_nhap
+!include _style.iuml
+autonumber
+actor "Người dùng" as U
+participant "LoginPage\n(React)" as FE
+participant "auth.login\n(FastAPI)" as API
+participant "LoginRateLimiter" as RL
+participant "users_repo" as REPO
+database "lms_analytics" as DB
+
+U -> FE : nhập tên đăng nhập, mật khẩu
+FE -> API : POST /api/v1/auth/login
+API -> RL : retry_after(ip, username)
+alt sai quá 5 lần trong 5 phút
+  RL --> API : số giây phải chờ
+  API --> FE : 429 + Retry-After
+  FE --> U : "Đăng nhập sai quá nhiều lần..."
+else được phép thử
+  API -> REPO : find_by_username(username)
+  REPO -> DB : SELECT ... FROM app_user
+  DB --> REPO : tài khoản (hoặc không có)
+  API -> API : verify_password(bcrypt)\n+ kiểm tra is_active
+  alt sai mật khẩu / không tồn tại / bị khóa
+    API -> RL : record_failure(ip, username)
+    API --> FE : 401 "Sai tên đăng nhập hoặc mật khẩu"
+    FE --> U : hiện thông báo lỗi
+  else hợp lệ
+    API -> RL : reset(ip, username)
+    API -> REPO : record_login(user_id)
+    REPO -> DB : UPDATE app_user SET last_login_at = now()
+    API -> API : create_access_token(user_id, role)\n(JWT HS256, hạn 480 phút)
+    API --> FE : 200 {access_token, user}
+    FE -> FE : lưu phiên vào localStorage
+    FE --> U : chuyển tới /admin hoặc /teacher
+  end
+end
+@enduml

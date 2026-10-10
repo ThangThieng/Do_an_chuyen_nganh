@@ -29,7 +29,10 @@ def compute(ctx: JobContext, dataset: CourseDataset | None = None) -> JobStats:
                             {"course_ids": ds.course_ids, "stat_date": ds.as_of.date()})
         risk_counts = {int(r.course_id): (int(r.red_count), int(r.yellow_count), int(r.green_count))
                        for r in counts.itertuples(index=False)}
-        rows = build_progress_rows(ds, metrics, risk_counts, ctx.run_id)
+        rule_of = {int(r.course_id): int(r.rule_set_id) for r in
+                   read_frame(conn, load_sql("risk_rule_of_day"),
+                              {"course_ids": ds.course_ids, "stat_date": ds.as_of.date()}).itertuples(index=False)}
+        rows = build_progress_rows(ds, metrics, risk_counts, ctx.run_id, rule_of=rule_of)
         changed = upsert(conn, "fact_course_progress_daily", PROGRESS_COLUMNS, rows, PROGRESS_KEYS,
                          json_columns=PROGRESS_JSON_COLUMNS)
     return JobStats(rows_extracted=ds.source_rows, rows_loaded=changed)

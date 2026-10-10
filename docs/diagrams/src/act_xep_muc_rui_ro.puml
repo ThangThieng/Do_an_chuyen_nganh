@@ -1,0 +1,43 @@
+@startuml act_xep_muc_rui_ro
+!include _style.iuml
+start
+:Nhận chỉ số của một sinh viên trong một môn
+(số buổi, số buổi vắng, số ngày chưa truy cập,
+lượt truy cập 14 ngày, số bài tới hạn, số bài thiếu)
+và trung vị lượt truy cập 14 ngày của lớp;
+if (Dữ liệu hợp lệ?) then (không)
+  :Báo lỗi ValueError;
+  stop
+endif
+if (Môn đã có buổi điểm danh?) then (có)
+  :C1 = 0 / 1 / 2 theo tỷ lệ vắng
+  (< 15% / 15%–< 30% / ≥ 30%);
+else (không)
+  :C1 = 0, attendance_status = NO_DATA;
+endif
+if (Chưa từng truy cập hoặc > 14 ngày không vào?) then (có)
+  :C2 = 2;
+elseif (> 7 ngày không vào hoặc lượt 14 ngày
+< 50% trung vị lớp?) then (có)
+  :C2 = 1;
+else
+  :C2 = 0;
+endif
+if (Có bài tập đã tới hạn?) then (có)
+  :C3 = 0 / 1 / 2 theo tỷ lệ thiếu
+  (< 20% / 20%–< 60% / ≥ 60%);
+else (không)
+  :C3 = 0;
+endif
+:tổng = C1 + C2 + C3;
+if (C2 = 2 hoặc ≥ 2 tiêu chí bằng 2 hoặc tổng ≥ 4?) then (có)
+  :mức = RED;
+elseif (tổng ≥ 1?) then (có)
+  :mức = YELLOW;
+else
+  :mức = GREEN;
+endif
+:risk_score = làm tròn(100 × (0,35·C1 + 0,30·C2 + 0,35·C3) / 2);
+:Ghép danh sách lý do bằng tiếng Việt;
+stop
+@enduml

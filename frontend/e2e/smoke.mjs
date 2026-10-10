@@ -84,13 +84,20 @@ try {
     await expectCanvasCount(page, 3, "admin tổng quan");
     await shot(page, "01_admin_overview");
 
-    await page.getByRole("row", { name: /Khoa Công nghệ Thông tin/ }).first().click();
-    await page.getByRole("button", { name: "Xem SV" }).first().waitFor();
+    await page.getByRole("row", { name: /Khoa Công nghệ Thông tin/ }).first().click();     // cấp Khoa
+    await page.getByText("So sánh các môn trong khoa").waitFor();
     await settle(page);
-    await page.getByRole("button", { name: "Xem SV" }).first().click();
-    await page.getByText(/SV đăng ký ·/).waitFor();
+    await expectCanvasCount(page, 4, "admin khoa");
+    await shot(page, "02_admin_faculty");
+    await page.locator(".ant-card", { hasText: "Bảng môn học của khoa" }).locator("tbody tr.ant-table-row").first().click();
+    await page.getByText(/luật cảnh báo: /).waitFor();                                        // cấp Môn học
     await settle(page);
-    await shot(page, "02_admin_drilldown_students");
+    await shot(page, "02b_admin_course");
+
+    await page.goto(`${BASE}/admin/channels`);                                           // Hệ thống › Kênh gửi tin
+    await page.getByText("Cấu hình hiện hành (đã che bí mật)").waitFor();
+    await settle(page);
+    await shot(page, "02c_admin_channels");
 
     await page.getByRole("link", { name: "Lưu lượng" }).click();
     await page.getByText("Top 10 giờ đông nhất").waitFor();
@@ -126,7 +133,7 @@ try {
 
     await page.getByRole("button", { name: /Nguy cơ cao/ }).first().click();          // dòng chú thích doughnut -> lọc
     await settle(page);
-    await page.getByRole("button", { name: "Chi tiết" }).first().click();
+    await page.locator(".ant-card", { hasText: "Bảng cảnh báo sinh viên" }).locator("tbody tr.ant-table-row").first().click();
     await page.getByRole("dialog").getByText("So sánh với trung bình lớp").waitFor();
     await settle(page);
     await shot(page, "06_teacher_student_modal", { fullPage: false });
@@ -137,6 +144,16 @@ try {
     await settle(page);
     await expectCanvasCount(page, 2, "gv tiến độ");
     await shot(page, "07_teacher_progress");
+
+    await page.getByRole("link", { name: "Thiết lập cảnh báo" }).click();
+    await page.getByText("Tác động nếu áp dụng").waitFor();
+    await settle(page);
+    await shot(page, "07b_teacher_rules");
+
+    await page.getByRole("link", { name: "Can thiệp" }).click();
+    await page.getByRole("tab", { name: "Cần liên hệ" }).waitFor();
+    await settle(page);
+    await shot(page, "07c_teacher_interventions");
 
     await page.goto(`${BASE}/admin`);                                                   // GV không vào được trang Admin
     await page.waitForURL(/\/teacher/);

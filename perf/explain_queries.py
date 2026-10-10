@@ -97,6 +97,21 @@ def main(argv: list[str] | None = None) -> int:
         ("teacher", "GET /teacher/courses/{id}/students/{uid}", f"{base}/students/{student}"),
         ("teacher", "GET /teacher/courses/{id}/students/{uid}/compare", f"{base}/students/{student}/compare"),
         ("teacher", "GET /teacher/courses/{id}/progress?granularity=week", f"{base}/progress?granularity=week"),
+        # v1.2 – so sánh khoa, xu hướng, trang Môn học của quản trị, minh bạch, luật theo môn, can thiệp
+        ("admin", "GET /admin/compare/faculties", "/api/v1/admin/compare/faculties"),
+        ("admin", "GET /admin/risk-trend (toàn trường, tuần)", "/api/v1/admin/risk-trend"),
+        ("admin", "GET /admin/risk-trend (khoa, ngày)", f"/api/v1/admin/risk-trend?faculty_id={faculty}&granularity=day"),
+        ("admin", "GET /admin/courses/{id}/risk-summary", f"/api/v1/admin/courses/{course}/risk-summary"),
+        ("admin", "GET /admin/courses/{id}/risk-students", f"/api/v1/admin/courses/{course}/risk-students"),
+        ("admin", "GET /admin/courses/{id}/students/{uid}/compare", f"/api/v1/admin/courses/{course}/students/{student}/compare"),
+        ("admin", "GET /admin/catalog/courses", "/api/v1/admin/catalog/courses"),
+        ("admin", "GET /meta/freshness", "/api/v1/meta/freshness"),
+        ("teacher", "GET /teacher/courses/{id}/risk-trend", f"{base}/risk-trend"),
+        ("teacher", "GET /teacher/courses/{id}/risk-rules", f"{base}/risk-rules"),
+        ("teacher", "GET /meta/risk-rule?course_id", f"/api/v1/meta/risk-rule?course_id={course}"),
+        ("teacher", "GET /teacher/courses/{id}/contact-list", f"{base}/contact-list"),
+        ("teacher", "GET /teacher/courses/{id}/messages", f"{base}/messages"),
+        ("teacher", "GET /teacher/courses/{id}/auto-prompts", f"{base}/auto-prompts"),
     ]
 
     client = TestClient(create_app())

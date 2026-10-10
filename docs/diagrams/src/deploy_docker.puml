@@ -1,0 +1,34 @@
+@startuml deploy_docker
+!include _style.iuml
+node "Máy người dùng" {
+  artifact "Trình duyệt web" as BR
+}
+node "Máy chủ Docker (docker compose)" {
+  node "web (nginx)" as WEB {
+    artifact "Bản build React (dist/)" as DIST
+  }
+  node "backend (python:3.11-slim)" as BE {
+    artifact "uvicorn --workers 2\nbackend.app.main:app" as UV
+  }
+  node "etl (python:3.11-slim)" as ETL {
+    artifact "python -m etl.scheduler" as SCH
+  }
+  node "init (chạy một lần)" as INIT {
+    artifact "bootstrap.sh: migrate, mock data,\nbackfill, sync-users" as BS
+  }
+  node "db (postgres:18-alpine)" as DB {
+    database "moodle_src" as MD
+    database "lms_analytics" as AN
+  }
+  storage "volume pgdata" as V1
+  storage "volume backups" as V2
+}
+BR --> WEB : HTTP :8080
+WEB --> BE : proxy /api (HTTP :8000)
+BE --> AN : TCP 5432
+ETL --> MD : TCP 5432 (chỉ đọc)
+ETL --> AN : TCP 5432
+INIT --> DB : TCP 5432
+DB --> V1
+BE --> V2
+@enduml

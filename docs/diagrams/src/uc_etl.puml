@@ -1,0 +1,30 @@
+@startuml uc_etl
+!include _style.iuml
+left to right direction
+actor "Bộ lập lịch ETL" as LL
+actor "Moodle LMS" as MD
+rectangle "Tiến trình ETL" {
+  usecase "Tổng hợp lưu lượng theo giờ\n(5 phút/lần)" as J1
+  usecase "Tổng hợp tiến độ môn\n(phút 05 mỗi giờ)" as J2
+  usecase "Chấm điểm rủi ro sinh viên\n(7h15–21h15, 2 giờ/lần)" as J3
+  usecase "Chốt số liệu ngày\n(01:00 hằng ngày)" as J4
+  usecase "Bảo trì dữ liệu\n(03:00 Chủ nhật)" as J5
+  usecase "Ghi nhật ký lần chạy" as LOG
+  usecase "Đọc dữ liệu Moodle\n(chỉ đọc)" as RD
+}
+LL --> J1
+LL --> J2
+LL --> J3
+LL --> J4
+LL --> J5
+J1 ..> LOG : <<include>>
+J2 ..> LOG : <<include>>
+J3 ..> LOG : <<include>>
+J4 ..> LOG : <<include>>
+J5 ..> LOG : <<include>>
+J1 ..> RD : <<include>>
+J2 ..> RD : <<include>>
+J3 ..> RD : <<include>>
+J4 ..> RD : <<include>>
+RD --> MD
+@enduml

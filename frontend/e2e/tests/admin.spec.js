@@ -1,4 +1,4 @@
-/** E2E Admin (SPEC 6.3): lọc HK1 → nhấn cột khoa → bảng drill-down hiện môn → Export Excel; lưu lượng; báo cáo PDF. */
+/** E2E Admin (SPEC 6.3, v1.2): toàn trường → khoa → môn → sinh viên; minh bạch nguồn dữ liệu; lưu lượng; báo cáo PDF. */
 import { expect, test } from "@playwright/test";
 import { ADMIN, chooseOption, login, requirePassword, waitForCharts } from "./helpers.js";
 
@@ -8,40 +8,64 @@ test.beforeEach(async ({ page }) => {
   await expect(page).toHaveURL(/\/admin$/);
 });
 
-test("lọc HK1 → nhấn cột khoa trên stacked bar → drill-down môn → xuất Excel", async ({ page }) => {
-  await waitForCharts(page, 3);
+test("toàn trường: KPI, biểu đồ tròn + xu hướng, so sánh 5 khoa; xuất Excel", async ({ page }) => {
+  await waitForCharts(page, 5);
   await chooseOption(page, "Học kỳ", "HK1");
-  await expect(page.getByText("2026-2027 · HK1")).toBeVisible();
+  await expect(page.locator(".ant-select[aria-label='Học kỳ']")).toContainText("HK1");
+  await expect(page.locator(".level-crumb [aria-current=page]")).toHaveText("Toàn trường");
+  await expect(page.getByText("Xu hướng mức rủi ro theo thời gian")).toBeVisible();
 
-  const barCard = page.locator(".ant-card", { has: page.getByText("SV đăng ký và tương tác theo khoa", { exact: true }) });
-  const canvas = barCard.locator("canvas");
-  const box = await canvas.boundingBox();
-  await canvas.click({ position: { x: box.width * 0.6, y: box.height * 0.52 } });
+  const compare = page.locator(".ant-card", { has: page.getByText("So sánh giữa các Khoa", { exact: true }) });
+  await expect(compare.locator("canvas")).toHaveCount(3);
+  await expect(compare.locator("tbody tr.ant-table-row")).toHaveCount(5);
 
-  const hierarchy = page.locator(".ant-card", { has: page.getByText("Thống kê phân cấp: Khoa ▸ Môn ▸ Sinh viên") });
-  await expect(hierarchy.locator(".ant-breadcrumb")).toContainText("Khoa Công nghệ Thông tin");
-  await expect(hierarchy.getByRole("button", { name: "Xem SV" })).toHaveCount(15);
-
-  await page.getByRole("button", { name: /Export/ }).click();
+  await page.getByRole("button", { name: "Xuất báo cáo" }).click();
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     page.getByText("Báo cáo quy mô & tương tác – Excel").click(),
   ]);
   expect(download.suggestedFilename()).toBe("bao_cao_enrollment_HK1_2026-2027.xlsx");
-  const file = await download.path();
-  expect(file).toBeTruthy();
+  expect(await download.path()).toBeTruthy();
 });
 
-test("drill-down tới sinh viên và lọc SV không tương tác", async ({ page }) => {
-  const hierarchy = page.locator(".ant-card", { has: page.getByText("Thống kê phân cấp: Khoa ▸ Môn ▸ Sinh viên") });
-  await hierarchy.getByRole("row", { name: /Khoa Công nghệ Thông tin/ }).click();
-  await hierarchy.getByRole("button", { name: "Xem SV" }).first().click();
-  await expect(hierarchy.getByText(/SV đăng ký · .* có tương tác/)).toBeVisible();
-  await hierarchy.getByText("Không tương tác", { exact: true }).click();
-  await expect(hierarchy.locator("tbody tr.ant-table-row").first()).toBeVisible();
-  const tags = await hierarchy.locator("tbody tr.ant-table-row").allInnerTexts();
-  expect(tags.length).toBeGreaterThan(0);
-  for (const row of tags) expect(row).toContain("Chưa");
+test("drill-down Khoa → Môn → Sinh viên, quay lại bằng thanh cấp xem và nút Back", async ({ page }) => {
+  const compare = page.locator(".ant-card", { has: page.getByText("So sánh giữa các Khoa", { exact: true }) });
+  await compare.getByRole("row", { name: /Khoa Công nghệ Thông tin/ }).click();
+  await expect(page).toHaveURL(/\/admin\/faculties\/\d+/);
+  await expect(page.locator(".level-crumb [aria-current=page]")).toHaveText("Khoa Công nghệ Thông tin");
+  await expect(page.getByText("So sánh các môn trong khoa", { exact: true })).toBeVisible();
+
+  const courses = page.locator(".ant-card", { has: page.getByText("Bảng môn học của khoa", { exact: true }) });
+  await courses.locator("tbody tr.ant-table-row").first().click();
+  await expect(page).toHaveURL(/\/admin\/courses\/\d+/);
+  await expect(page.getByText(/luật cảnh báo: /)).toBeVisible();
+  await page.locator("tbody tr.ant-table-row").first().click();
+  const modal = page.getByRole("dialog");
+  await expect(modal.getByText("So sánh với trung bình lớp")).toBeVisible();
+  await expect(modal.getByRole("button", { name: "Gửi email" })).toHaveCount(0);   // quản trị chỉ xem
+  await modal.getByRole("button", { name: "Đóng" }).first().click();
+
+  // Cấp Sinh viên gắn với URL (?student=): F5 mở lại đúng cửa sổ, Back đóng cửa sổ về cấp Môn học
+  await page.locator("tbody tr.ant-table-row").first().click();
+  await expect(page).toHaveURL(/[?&]student=\d+/);
+  await page.reload();
+  await expect(page.getByRole("dialog").getByText("So sánh với trung bình lớp")).toBeVisible();
+  await expect(page.locator(".level-crumb [aria-current=page]")).toHaveText("Sinh viên");
+  await page.goBack();
+  await expect(page).not.toHaveURL(/[?&]student=/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/admin\/faculties\/\d+/);
+  await page.locator(".level-crumb").getByRole("link", { name: "Toàn trường" }).click();
+  await expect(page).toHaveURL(/\/admin(\?.*)?$/);
+});
+
+test("minh bạch: ngăn Nguồn & cách tính nêu bảng Moodle và luật 3 tiêu chí", async ({ page }) => {
+  await page.getByRole("button", { name: /Nguồn & cách tính/ }).first().click();
+  const drawer = page.locator(".ant-drawer-open");
+  await expect(drawer.getByText(/mdl_/).first()).toBeVisible();
+  await expect(drawer.getByText(/Vắng học/).first()).toBeVisible();
 });
 
 test("trang lưu lượng: biểu đồ 2 trục, heatmap và thẻ thời gian thực", async ({ page }) => {
@@ -55,7 +79,7 @@ test("trang lưu lượng: biểu đồ 2 trục, heatmap và thẻ thời gian 
 test("báo cáo cảnh báo: lọc mức Nguy cơ cao → xem trước → xuất PDF", async ({ page }) => {
   await page.getByRole("link", { name: "Báo cáo" }).click();
   await chooseOption(page, "Loại báo cáo", "Cảnh báo sinh viên nguy cơ");
-  await chooseOption(page, "Mức rủi ro", "● Nguy cơ cao");
+  await chooseOption(page, "Mức rủi ro", "Nguy cơ cao");
   await page.getByRole("button", { name: "Xem trước" }).click();
   await expect(page.getByText("Báo cáo cảnh báo sinh viên nguy cơ")).toBeVisible();
   const badges = page.locator("tbody .risk-badge");

@@ -1,9 +1,12 @@
 -- Tiêu chí 1 – điểm danh (SPEC 1.6a), trả về MỖI (SV, buổi) để tính cả tổng và theo tuần.
 -- Buổi được tính khi đã diễn ra và đã điểm danh trước :as_of. Buổi gắn nhóm chỉ tính SV thuộc nhóm.
 -- acronym NULL = không có bản ghi điểm danh -> coi là vắng.
+-- Một môn có thể có nhiều hoạt động điểm danh (vd lý thuyết và thực hành) -> trả kèm attendance_id, attendance_name.
 WITH student_enrol AS ({{student_enrol}})
 SELECT a.course     AS course_id,
        se.user_id,
+       a.id         AS attendance_id,
+       a.name       AS attendance_name,
        s.id         AS session_id,
        s.sessdate,
        st.acronym

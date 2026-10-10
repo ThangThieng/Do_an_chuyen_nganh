@@ -58,7 +58,9 @@ export function cleanParams(params = {}) {
 }
 
 export const get = (url, params) => api.get(url, { params: cleanParams(params) }).then((r) => r.data);
-export const post = (url, body) => api.post(url, body).then((r) => r.data);
+export const post = (url, body, config) => api.post(url, body, config).then((r) => r.data);
+export const put = (url, body, config) => api.put(url, body, config).then((r) => r.data);
+export const del = (url) => api.delete(url).then((r) => r.data);
 
 export async function errorMessage(error) {
   const data = error?.response?.data;
@@ -72,6 +74,8 @@ export async function errorMessage(error) {
   const detail = data?.detail;
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) return detail.map((d) => d.msg).join("; ");
+  if (detail?.errors) return detail.errors.map((d) => d.message).join("; ");
+  if (detail?.message) return detail.message;
   if (error?.code === "ECONNABORTED") return "Máy chủ phản hồi quá lâu, vui lòng thử lại";
   if (!error?.response) return "Không kết nối được máy chủ API";
   return error?.message ?? "Lỗi không xác định";

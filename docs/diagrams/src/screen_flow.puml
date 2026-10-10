@@ -1,0 +1,46 @@
+@startuml screen_flow
+!include _style.iuml
+left to right direction
+skinparam rectangleBackgroundColor #FFFFFF
+rectangle "MH01\nĐăng nhập" as LOGIN
+package "Quản trị viên (/admin)" {
+  rectangle "MH02\nTổng quan" as OV
+  rectangle "Drill-down: môn của khoa\n→ sinh viên của môn" as DD
+  rectangle "MH03\nLưu lượng" as TR
+  rectangle "MH04\nBáo cáo" as RP
+  rectangle "MH05\nDanh mục môn học" as CT
+  rectangle "MH06\nQuản lý người dùng" as US
+  rectangle "Hộp thoại\nmật khẩu tạm" as TMP
+  rectangle "MH07\nNhật ký ETL" as ETL
+  rectangle "MH08\nSao lưu & phục hồi" as BK
+  rectangle "Hộp thoại\nxác nhận phục hồi" as RST
+}
+package "Giảng viên (/teacher)" {
+  rectangle "MH09\nCảnh báo sinh viên" as RISK
+  rectangle "MH10\nChi tiết sinh viên (Modal)" as DET
+  rectangle "MH11\nTiến độ lớp" as PRG
+}
+package "Dùng chung" {
+  rectangle "MH12\nTài khoản & đổi mật khẩu" as ACC
+  rectangle "MH13\nTrợ giúp" as HELP
+}
+LOGIN --> OV : vai trò ADMIN
+LOGIN --> RISK : vai trò TEACHER\n(môn đầu tiên)
+OV --> DD : nhấn cột / dòng khoa
+OV --> RP : nút Export
+OV --> TR : menu
+OV --> CT : menu
+OV --> US : menu Hệ thống
+OV --> ETL : menu Hệ thống
+OV --> BK : menu Hệ thống
+US --> TMP : Đặt lại mật khẩu
+BK --> RST : Phục hồi
+RISK --> DET : nút "Chi tiết"
+RISK --> PRG : tab Tiến độ lớp
+PRG --> RISK : tab Cảnh báo
+OV --> ACC : menu tài khoản
+RISK --> ACC : menu tài khoản
+OV --> HELP : menu Trợ giúp
+RISK --> HELP : menu Trợ giúp
+ACC --> LOGIN : Đăng xuất
+@enduml

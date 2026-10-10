@@ -1,0 +1,38 @@
+@startuml act_xuat_bao_cao
+!include _style.iuml
+|Quản trị viên|
+start
+:Mở trang Báo cáo;
+:Chọn loại báo cáo
+(quy mô đào tạo / cảnh báo / lưu lượng);
+:Đặt bộ lọc (năm học, học kỳ, khoa, môn,
+mức rủi ro hoặc khoảng ngày);
+if (Muốn xem trước?) then (có)
+  |Hệ thống|
+  :GET /admin/reports/preview (phân trang);
+  :Hiển thị bảng xem trước;
+  |Quản trị viên|
+  if (Dữ liệu đúng mong muốn?) then (không)
+    :Chỉnh lại bộ lọc;
+    stop
+  endif
+endif
+:Nhấn Xuất Excel hoặc Xuất PDF;
+|Hệ thống|
+:GET /admin/reports/export?format=...;
+:Truy vấn bảng fact theo bộ lọc,
+lấy tối đa giới hạn + 1 dòng;
+if (Vượt giới hạn\n(PDF 5.000 / Excel 200.000 dòng)?) then (có)
+  :Trả 422 kèm thông báo;
+  |Quản trị viên|
+  :Thu hẹp bộ lọc;
+  stop
+else (không)
+  |Hệ thống|
+  :Dựng file (openpyxl hoặc ReportLab);
+  :Trả file kèm tên trong Content-Disposition;
+endif
+|Quản trị viên|
+:Trình duyệt lưu file về máy;
+stop
+@enduml

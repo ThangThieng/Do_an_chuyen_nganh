@@ -1,0 +1,15 @@
+@startuml state_lan_chay_etl
+!include _style.iuml
+hide empty description
+[*] --> ChoKhoa : bộ lập lịch kích hoạt job
+state "Chờ khóa advisory" as ChoKhoa
+state "RUNNING" as RUNNING
+state "SUCCESS" as SUCCESS
+state "FAILED" as FAILED
+ChoKhoa --> [*] : [khóa đang bị job khác giữ]\nbỏ qua lượt, không ghi nhật ký
+ChoKhoa --> RUNNING : [lấy được khóa]\nINSERT etl_run_log
+RUNNING --> SUCCESS : extract, transform, load xong\n/ ghi rows_extracted, rows_loaded
+RUNNING --> FAILED : có ngoại lệ\n/ ghi error_message
+SUCCESS --> [*]
+FAILED --> [*] : scheduler thử lại sau 1, 5, 15 phút\n(mỗi lần thử là một lần chạy mới)
+@enduml

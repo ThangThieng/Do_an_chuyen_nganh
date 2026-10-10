@@ -36,7 +36,15 @@ export function AuthProvider({ children }) {
     return next.user;
   }, [queryClient]);
 
-  const value = useMemo(() => ({ user: session?.user ?? null, login, logout }), [session, login, logout]);
+  /** Đổi mật khẩu thành công: server cấp token mới (token cũ đã bị thu hồi). */
+  const applyToken = useCallback((data) => {
+    const next = { token: data.access_token, user: data.user, expiresAt: Date.now() + data.expires_in * 1000 };
+    saveSession(next);
+    setSession(next);
+  }, []);
+
+  const value = useMemo(() => ({ user: session?.user ?? null, login, logout, applyToken }),
+    [session, login, logout, applyToken]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
