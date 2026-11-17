@@ -30,6 +30,12 @@ class Faculty(BaseModel):
     name: str
 
 
+class Department(BaseModel):
+    id: int
+    name: str
+    faculty_id: int
+
+
 class Term(BaseModel):
     academic_year: str
     semester: int
@@ -37,6 +43,7 @@ class Term(BaseModel):
 
 class FiltersOut(Stamped):
     faculties: list[Faculty]
+    departments: list[Department] = []
     academic_years: list[str]
     semesters: list[int]
     current: Term

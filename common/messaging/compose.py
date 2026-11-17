@@ -17,7 +17,7 @@ from common.messaging.templates import Rendered, TemplateError, build_context, r
 
 STUDENT_COLUMNS = """r.user_id, r.student_code, r.student_name, r.email, r.risk_level, r.risk_score, r.risk_reasons,
        r.score_attendance, r.score_inactivity, r.score_assignment, r.total_sessions, r.absent_sessions,
-       r.absence_rate, r.days_since_last_access, r.total_assignments, r.missing_assignments_count,
+       r.absence_rate, r.attendance_source, r.days_since_last_access, r.total_assignments, r.missing_assignments_count,
        r.assignment_detail, r.snapshot_date, r.course_shortname, r.course_fullname"""
 
 

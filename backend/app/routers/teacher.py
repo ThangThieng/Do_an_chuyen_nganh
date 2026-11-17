@@ -158,9 +158,19 @@ def progress(access: CourseAccess = Depends(course_access), granularity: Literal
         "avg_access_per_student": latest["avg_access_per_student"],
         "red": latest["red_count"], "yellow": latest["yellow_count"], "green": latest["green_count"],
     }
+    series = loader(conn, access.course_id, access.teacher_id, today())
+    # Như đồ thị xu hướng rủi ro: bỏ các ngày / tuần kết thúc trước khi đủ 7 ngày nhật ký (SV hoạt động 7 ngày, tỷ lệ…
+    # của tuần đầu chỉ dựa trên 1 ngày log – dữ liệu thật: log bắt đầu Chủ nhật 13/09/2026)
+    warmup = trends_repo.log_warmup_end(conn)
+    hidden_before = warmup if warmup and series and series[0]["period_end"] < warmup <= today() else None
+    if hidden_before:
+        series = [p for p in series if p["period_end"] >= hidden_before]
     return {"course_id": access.course_id, "granularity": granularity, "summary": summary,
-            "series": loader(conn, access.course_id, access.teacher_id, today()),
-            "sections": latest["section_progress"], "data_updated_at": stamp(conn)}
+            "series": series, "hidden_before": hidden_before,
+            "sections": latest["section_progress"],
+            "attendance_from_gradebook": teacher_repo.attendance_from_gradebook(
+                conn, access.course_id, access.teacher_id, today()),
+            "data_updated_at": stamp(conn)}
 
 
 @router.get("/courses/{course_id}/students/{user_id}/compare", response_model=CompareOut,

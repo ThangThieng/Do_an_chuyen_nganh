@@ -14,8 +14,8 @@ import {
   useFacultyCompare, useKpis, useTrafficHeatmap, useTrafficHourly, useTrafficRealtime,
 } from "../../api/hooks.js";
 import { ComparisonColumns, RiskShareBars, VolumeColumns, chartHeight } from "../../charts/ComparisonCharts.jsx";
-import TrafficDualAxisChart, { PeakLegend, trafficTableColumns } from "../../charts/TrafficDualAxisChart.jsx";
-import TrafficHeatmap, { heatmapTableColumns } from "../../charts/TrafficHeatmap.jsx";
+import TrafficDualAxisChart, { PeakLegend, trafficColumnsFor } from "../../charts/TrafficDualAxisChart.jsx";
+import TrafficHeatmap, { HEATMAP_SCOPE_NOTE, OperationHints, heatmapRange, heatmapTableColumns } from "../../charts/TrafficHeatmap.jsx";
 import { ChartCard, Delta, KpiCard } from "../../components/common.jsx";
 import LevelBreadcrumb from "../../components/LevelBreadcrumb.jsx";
 import MetricInfo from "../../components/MetricInfo.jsx";
@@ -47,6 +47,9 @@ export default function AdminOverview() {
 
   const kpis = useKpis(term);
   const compare = useFacultyCompare(term);
+  // Chỉ có một khoa (dữ liệu thật của Khoa CNTT): so sánh các bộ môn / chuyên ngành của khoa đó thay cho các khoa
+  const onlyOneFaculty = (compare.data?.items ?? []).length === 1;
+  const departments = useFacultyCompare(term, "department", onlyOneFaculty);
   const realtime = useTrafficRealtime();
   const asOf = filters ? dayjs(filters.as_of) : null;
   const week = useTrafficHourly(asOf?.subtract(6, "day").format("YYYY-MM-DD"), asOf?.format("YYYY-MM-DD"));
@@ -54,17 +57,24 @@ export default function AdminOverview() {
 
   const k = kpis.data;
   const school = compare.data?.school;
-  const allFaculties = compare.data?.items ?? [];
+  const byDepartment = onlyOneFaculty && (departments.data?.items ?? []).length > 1;
+  const allFaculties = (byDepartment ? departments.data?.items : compare.data?.items) ?? [];
+  const unitLabel = byDepartment ? "bộ môn / chuyên ngành" : "khoa";
+  // Chỉ một khoa: "trung bình toàn trường" chính là trung bình của khoa đó – gọi đúng tên
+  const avgLabel = onlyOneFaculty ? "toàn khoa" : "toàn trường";
+  const labelKey = byDepartment ? "group_name" : "faculty_name";
   // Hơn 8 khoa: biểu đồ tự chuyển thanh ngang; mặc định hiện 10 khoa đầu (theo quy mô) kèm "Xem tất cả" (Mục 3.2)
   const faculties = !showAll && allFaculties.length > MANY_FACULTIES ? allFaculties.slice(0, TOP_FACULTIES) : allFaculties;
   const rateKey = focusLevel ? `${focusLevel.toLowerCase()}_rate` : null;
   const highlight = rateKey && school?.[rateKey] != null
     ? (f) => f[rateKey] != null && Number(f[rateKey]) > Number(school[rateKey]) : undefined;
   const highlightNote = focusLevel && school
-    ? `Tỷ lệ ${RISK[focusLevel].label.toLowerCase()} cao hơn trung bình toàn trường (${fmtPercent(school[rateKey])})` : undefined;
+    ? `Tỷ lệ ${RISK[focusLevel].label.toLowerCase()} cao hơn trung bình ${avgLabel} (${fmtPercent(school[rateKey])})` : undefined;
   const trafficItems = range === "24h" ? realtime.data?.series_24h : week.data?.items;
   const trafficQuery = range === "24h" ? realtime : week;
-  const openFaculty = (f) => navigate(`/admin/faculties/${f.faculty_id}${search}`);
+  // So sánh theo bộ môn / chuyên ngành: mở trang khoa đã lọc sẵn đúng bộ môn vừa nhấn
+  const openFaculty = (f) => navigate(`/admin/faculties/${f.faculty_id}${search}${
+    byDepartment && f.group_name ? `${search ? "&" : "?"}dept=${encodeURIComponent(f.group_name)}` : ""}`);
 
   async function onExport({ key }) {
     const [reportType, format] = key.split(":");
@@ -80,7 +90,7 @@ export default function AdminOverview() {
   }
 
   const redDelta = k?.red_rate_prev_week == null ? null : Number(k.red_rate) - Number(k.red_rate_prev_week);
-  const onlyOne = allFaculties.length === 1;
+  const onlyOne = onlyOneFaculty;
   const customCourses = allFaculties.reduce((n, f) => n + (f.custom_rule_courses ?? 0), 0);
 
   return (
@@ -88,7 +98,11 @@ export default function AdminOverview() {
       <LevelBreadcrumb level="school" search={search} />
       <div className="filter-bar">
         <TermFilterBar filters={filters} term={term} onTermChange={setTerm} facultyId={undefined}
-          onFacultyChange={(id) => id && navigate(`/admin/faculties/${id}${search}`)} />
+          onFacultyChange={(id) => id && navigate(`/admin/faculties/${id}${search}`)}
+          onDepartmentChange={(id) => {          // chỉ một khoa: chọn bộ môn -> trang Khoa lọc sẵn bộ môn đó
+            const d = (filters?.departments ?? []).find((x) => x.id === id);
+            if (d) navigate(`/admin/faculties/${d.faculty_id}${search}${search ? "&" : "?"}dept=${encodeURIComponent(d.name)}`);
+          }} />
         <span className="spacer" />
         <Button onClick={() => queryClient.invalidateQueries()}>Làm mới</Button>
         <Dropdown menu={{ items: EXPORTS, onClick: onExport }} disabled={!term}>
@@ -99,7 +113,7 @@ export default function AdminOverview() {
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={8} xxl={4}>
           <KpiCard label="Tổng môn học" loading={!k} value={fmtInt(k?.total_courses)}
-            hint={`${fmtInt(faculties.length)} khoa`} detail={`Năm học ${term?.academic_year ?? ""} · HK${term?.semester ?? ""}`} />
+            hint={byDepartment ? `1 khoa · ${fmtInt(allFaculties.length)} bộ môn / chuyên ngành` : `${fmtInt((compare.data?.items ?? []).length)} khoa`} detail={`Năm học ${term?.academic_year ?? ""} · HK${term?.semester ?? ""}`} />
         </Col>
         <Col xs={24} sm={12} lg={8} xxl={4}>
           <KpiCard label="SV đăng ký" loading={!k} value={fmtInt(k?.total_enrolled)} hint={`${fmtInt(k?.unique_students)} sinh viên`}
@@ -112,12 +126,12 @@ export default function AdminOverview() {
         </Col>
         <Col xs={24} sm={12} lg={8} xxl={4}>
           <KpiCard label="Online hiện tại" loading={!k} value={fmtInt(k?.current_online)}
-            hint={k?.current_online_at ? `lúc ${fmtHour(k.current_online_at)}` : "chưa có mẫu"}
+            hint={k?.current_online_at ? `lúc ${fmtHour(k.current_online_at)}${k.current_online_source === "LOGSTORE" ? " · ước tính từ nhật ký" : ""}` : "chưa có mẫu"}
             detail={k ? `Trung bình hôm nay ${fmtDecimal(k.avg_online_users_today, 0)} người` : undefined} />
         </Col>
         <Col xs={24} sm={12} lg={8} xxl={4}>
-          <KpiCard label="Peak hôm nay" loading={!k}
-            value={k?.peak_requests_today ? `${fmtInt(k.peak_requests_today.value)} req` : "–"}
+          <KpiCard label="Giờ nhiều hoạt động nhất hôm nay" loading={!k}
+            value={k?.peak_requests_today ? `${fmtInt(k.peak_requests_today.value)} lượt` : "–"}
             hint={k?.peak_requests_today ? `lúc ${k.peak_requests_today.hour}` : "chưa có dữ liệu"} />
         </Col>
         <Col xs={24} sm={12} lg={8} xxl={4}>
@@ -134,14 +148,15 @@ export default function AdminOverview() {
         </Col>
 
         <Col span={24}>
-          <Card title="So sánh giữa các Khoa"
+          <Card title={byDepartment ? `So sánh giữa các bộ môn / chuyên ngành – ${allFaculties[0]?.faculty_name ?? ""}` : "So sánh giữa các Khoa"}
             extra={<MetricInfo metric={{ keys: ["enrolled", "unique_students", "active_rate", "risk_level"],
               note: school ? `${customCourses}/${school.course_count} môn dùng luật cảnh báo riêng (cột "Môn dùng luật riêng" trong bảng).` : undefined }} />}
-            loading={compare.isLoading}>
-            {onlyOne && <div className="muted" style={{ marginBottom: 8 }}>Học kỳ này mới có dữ liệu của 1 khoa.</div>}
+            loading={compare.isLoading || (onlyOneFaculty && departments.isLoading)}>
+            {byDepartment && <div className="muted" style={{ marginBottom: 8 }}>Học kỳ này chỉ có dữ liệu của 1 khoa nên so sánh các bộ môn / chuyên ngành của khoa đó. Nhấn vào một cột hoặc dòng để xem các môn của bộ môn / chuyên ngành đó.</div>}
+            {onlyOne && !byDepartment && <div className="muted" style={{ marginBottom: 8 }}>Học kỳ này mới có dữ liệu của 1 khoa.</div>}
             {highlightNote && (
               <div className="focus-note" style={{ marginBottom: 8 }}>
-                Đang tô nổi các khoa có tỷ lệ <b>{RISK[focusLevel].label.toLowerCase()}</b> cao hơn trung bình toàn trường
+                Đang tô nổi các {unitLabel} có tỷ lệ <b>{RISK[focusLevel].label.toLowerCase()}</b> cao hơn trung bình {avgLabel}
                 ({fmtPercent(school[rateKey])}). <a role="button" onClick={() => setFocusLevel(null)}>Bỏ chọn</a>
               </div>
             )}
@@ -149,32 +164,32 @@ export default function AdminOverview() {
               <Col xs={24} lg={8}>
                 <div className="chart-title">Quy mô (lượt ghi danh)</div>
                 <div style={{ height: chartHeight(faculties.length) }}>
-                  <VolumeColumns items={faculties} labelKey="faculty_name" onSelect={openFaculty}
+                  <VolumeColumns items={faculties} labelKey={labelKey} onSelect={openFaculty}
                     highlight={highlight} highlightNote={highlightNote} />
                 </div>
               </Col>
               <Col xs={24} lg={8}>
                 <div className="chart-title">Tỷ lệ tương tác</div>
                 <div style={{ height: chartHeight(faculties.length) }}>
-                  <ComparisonColumns items={faculties} labelKey="faculty_name" valueKey="active_rate" label="Tỷ lệ tương tác"
-                    reference={school?.active_rate != null ? { value: Number(school.active_rate), label: `TB toàn trường ${fmtPercent(school.active_rate)}` } : undefined}
+                  <ComparisonColumns items={faculties} labelKey={labelKey} valueKey="active_rate" label="Tỷ lệ tương tác"
+                    reference={school?.active_rate != null ? { value: Number(school.active_rate), label: `TB ${avgLabel} ${fmtPercent(school.active_rate)}` } : undefined}
                     onSelect={openFaculty} highlight={highlight} highlightNote={highlightNote} />
                 </div>
               </Col>
               <Col xs={24} lg={8}>
                 <div className="chart-title">Phân bố mức rủi ro</div>
                 <div style={{ height: chartHeight(faculties.length) }}>
-                  <RiskShareBars items={faculties} labelKey="faculty_name" onSelect={openFaculty}
+                  <RiskShareBars items={faculties} labelKey={labelKey} onSelect={openFaculty}
                     highlight={highlight} highlightNote={highlightNote} />
                 </div>
               </Col>
             </Row>
-            <Table style={{ marginTop: 16 }} size="middle" rowKey="faculty_id" pagination={false} dataSource={faculties}
+            <Table style={{ marginTop: 16 }} size="middle" rowKey="group_id" pagination={false} dataSource={faculties}
               scroll={{ x: "max-content" }}
               onRow={(row) => ({ onClick: () => openFaculty(row), style: { cursor: "pointer" } })}
               rowClassName={(row) => (highlight?.(row) ? "row-focus" : "")}
               columns={[
-                { title: "Khoa", dataIndex: "faculty_name", render: (v) => <b>{v}</b> },
+                { title: byDepartment ? "Bộ môn / Chuyên ngành" : "Khoa", dataIndex: labelKey, render: (v) => <b>{v}</b> },
                 { title: "Số môn", dataIndex: "course_count", align: "right" },
                 { title: "Lượt ghi danh", dataIndex: "enrolled", align: "right", render: fmtInt },
                 { title: "SV duy nhất", dataIndex: "unique_students", align: "right", render: fmtInt },
@@ -189,7 +204,7 @@ export default function AdminOverview() {
               ]} />
             {allFaculties.length > MANY_FACULTIES && (
               <a role="button" style={{ display: "inline-block", marginTop: 8 }} onClick={() => setShowAll((v) => !v)}>
-                {showAll ? `Chỉ hiện ${TOP_FACULTIES} khoa lớn nhất` : `Xem tất cả ${allFaculties.length} khoa`}
+                {showAll ? `Chỉ hiện ${TOP_FACULTIES} ${unitLabel} lớn nhất` : `Xem tất cả ${allFaculties.length} ${unitLabel}`}
               </a>
             )}
           </Card>
@@ -199,23 +214,29 @@ export default function AdminOverview() {
         <Col span={24}>
           <ChartCard
             title="Lưu lượng truy cập"
-            subtitle={<>Requests và người dùng online trung bình theo giờ <PeakLegend inline /></>}
+            subtitle={<>Lượt hoạt động (sự kiện trong nhật ký các môn) và người dùng online trung bình theo giờ <PeakLegend inline /></>}
             info="traffic"
             extra={<Segmented size="small" value={range} onChange={setRange} options={[{ label: "24 giờ", value: "24h" }, { label: "7 ngày", value: "7d" }]} />}
             loading={!trafficItems && trafficQuery.isLoading} error={trafficQuery.error} fetching={trafficQuery.isFetching}
-            table={{ rowKey: "stat_hour", dataSource: trafficItems ?? [], columns: trafficTableColumns }}
+            table={{ rowKey: "stat_hour", dataSource: trafficItems ?? [], columns: trafficColumnsFor(trafficItems) }}
           >
             {trafficItems && <TrafficDualAxisChart items={trafficItems} labelFormat={range === "24h" ? "HH:mm" : "DD/MM HH:mm"} />}
           </ChartCard>
         </Col>
         <Col span={24}>
           <ChartCard
-            title="Heatmap giờ × thứ (4 tuần)"
-            subtitle={heatmap.data ? `Trung bình ${dayjs(heatmap.data.from_date).format("DD/MM")} – ${dayjs(heatmap.data.to_date).format("DD/MM/YYYY")}` : undefined}
+            title="Giờ đông / giờ vắng (4 tuần)"
+            subtitle={heatmapRange(heatmap.data, dayjs)}
             loading={heatmap.isLoading} error={heatmap.error} fetching={heatmap.isFetching} bare
             table={{ rowKey: (r) => `${r.day_of_week}-${r.hour_of_day}`, dataSource: heatmap.data?.matrix ?? [], columns: heatmapTableColumns }}
           >
-            {heatmap.data && <TrafficHeatmap matrix={heatmap.data.matrix} />}
+            {heatmap.data && (
+              <>
+                <TrafficHeatmap matrix={heatmap.data.matrix} metric="online" />
+                <OperationHints matrix={heatmap.data.matrix} />
+                <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{HEATMAP_SCOPE_NOTE}</div>
+              </>
+            )}
           </ChartCard>
         </Col>
       </Row>

@@ -1,8 +1,16 @@
 import { Select } from "antd";
 
-/** Bộ lọc Năm học / Học kỳ / Khoa – một hàng phía trên nội dung mà nó áp dụng. */
-export default function TermFilterBar({ filters, term, onTermChange, facultyId, onFacultyChange, showFaculty = true }) {
+/**
+ * Bộ lọc Năm học / Học kỳ / Khoa – một hàng phía trên nội dung mà nó áp dụng.
+ * Dữ liệu chỉ có một khoa: ô "Khoa" (chỉ có "Tất cả khoa" và đúng một khoa) được thay bằng ô "Bộ môn / Chuyên ngành"
+ * nếu trang truyền onDepartmentChange, không thì ẩn.
+ */
+export const isSingleFaculty = (filters) => (filters?.faculties ?? []).length === 1;
+
+export default function TermFilterBar({ filters, term, onTermChange, facultyId, onFacultyChange, showFaculty = true,
+  departmentId, onDepartmentChange }) {
   const years = filters?.academic_years ?? [];
+  const single = isSingleFaculty(filters);
   return (
     <>
       <Select
@@ -19,7 +27,17 @@ export default function TermFilterBar({ filters, term, onTermChange, facultyId, 
         onChange={(semester) => onTermChange({ ...term, semester })}
         options={[1, 2, 3].map((s) => ({ value: s, label: s === 3 ? "HK hè" : `HK${s}` }))}
       />
-      {showFaculty && (
+      {showFaculty && single && onDepartmentChange && (
+        <Select
+          aria-label="Bộ môn / Chuyên ngành"
+          style={{ width: 280 }}
+          value={departmentId ?? "ALL"}
+          onChange={(v) => onDepartmentChange(v === "ALL" ? undefined : v)}
+          options={[{ value: "ALL", label: `${filters.faculties[0].name}: tất cả bộ môn` },
+            ...(filters?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))]}
+        />
+      )}
+      {showFaculty && !single && (
         <Select
           aria-label="Khoa"
           style={{ width: 240 }}

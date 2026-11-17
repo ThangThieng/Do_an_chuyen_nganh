@@ -1,7 +1,11 @@
 """
 Fixture kiểm thử Backend API (SPEC 6.3).
 
-Tiền điều kiện: CSDL phân tích đã có dữ liệu ETL tại LMS_AS_OF (python -m etl.jobs.backfill --from 2026-09-07).
+Kiểm thử KHÔNG chạy trên CSDL thật: các biến *_DB_NAME được trỏ sang bản sao (mặc định lms_analytics_test,
+moodle_src_test, moodle_stub_test) TRƯỚC khi nạp .env. Tạo / làm mới bản sao từ dữ liệu thật đã chạy ETL:
+    python -m scripts.make_test_db      (tạm dừng API / ETL / Moodle mô phỏng trong lúc sao)
+Bản sao chưa có thì toàn bộ kiểm thử Backend được bỏ qua kèm hướng dẫn.
+Các bài kiểm thử không gắn với số liệu cụ thể (số khoa, số môn…) mà kiểm tra tính nhất quán giữa các API.
 
 Tài khoản test:
   - ADMIN "canh gác" user_id 990001 (mật khẩu biết trước) và 990002 (bị khóa) – tạo mới rồi xóa khi xong.
@@ -14,6 +18,7 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("BACKEND_JWT_SECRET", "pytest-only-secret-" + "x" * 40)
+from tests.conftest import TEST_DATABASES  # noqa: E402  (đã trỏ *_DB_NAME sang CSDL kiểm thử)
 
 import psycopg
 import pytest
@@ -31,10 +36,26 @@ INACTIVE_USERNAME, DEFAULT_PASSWORD = "test.inactive", "Test@Pass2026"
 TEST_MARK = "[pytest]"
 
 
+def _test_databases_ready() -> str | None:
+    cfg = load_db_config("ANALYTICS_DB")
+    with psycopg.connect(**cfg.conninfo(dbname=cfg.maintenance_db, application_name="lms-backend-tests")) as admin:
+        have = {r[0] for r in admin.execute("SELECT datname FROM pg_database")}
+    missing = [TEST_DATABASES[k] for k in ("ANALYTICS_DB_NAME", "MOODLE_DB_NAME") if TEST_DATABASES[k] not in have]
+    return ("Chưa có CSDL kiểm thử " + ", ".join(missing) + " – chạy: python -m scripts.make_test_db") if missing else None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _require_test_databases():
+    reason = _test_databases_ready()
+    if reason:
+        pytest.skip(reason)
+
+
 @pytest.fixture(scope="session")
 def db():
-    with psycopg.connect(**load_db_config("ANALYTICS_DB").conninfo(application_name="lms-backend-tests"),
-                         autocommit=True) as conn:
+    cfg = load_db_config("ANALYTICS_DB")
+    assert cfg.dbname == TEST_DATABASES["ANALYTICS_DB_NAME"], "Kiểm thử chỉ được chạy trên CSDL kiểm thử"
+    with psycopg.connect(**cfg.conninfo(application_name="lms-backend-tests"), autocommit=True) as conn:
         yield conn
 
 
@@ -76,7 +97,7 @@ def teachers(courses) -> dict:
     first = courses[0]
     teacher = first["teacher_ids"][0]
     others = sorted({t for c in courses for t in c["teacher_ids"]} - set(first["teacher_ids"]))
-    assert others, "Mock data cần ít nhất 2 giảng viên"
+    assert others, "Dữ liệu kiểm thử cần ít nhất 2 giảng viên"
     return {"teacher": teacher, "other": others[0], "course": first,
             "teacher_courses": [c for c in courses if teacher in c["teacher_ids"]]}
 

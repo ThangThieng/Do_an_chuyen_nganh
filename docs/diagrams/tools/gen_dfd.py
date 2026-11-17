@@ -51,6 +51,11 @@ DFDS = [
      [("TIẾN ĐỘ MÔN THEO NGÀY", True, False), ("CẢNH BÁO SINH VIÊN", True, False)]),
     ("dfd_etl_rui_ro", "Bộ lập lịch ETL", "Chấm điểm\nrủi ro (ETL)", None, None,
      [("CSDL MOODLE", True, False), ("CẢNH BÁO SINH VIÊN\n+ NHẬT KÝ ETL", True, True)]),
+    # Phiên bản 1.2
+    ("dfd_luat_canh_bao", "Giảng viên", "Thiết lập luật\ncảnh báo của môn", None, None,
+     [("BỘ LUẬT CẢNH BÁO", True, True), ("CẢNH BÁO SINH VIÊN", True, True)]),
+    ("dfd_gui_tin", "Giảng viên", "Soạn và gửi\ntin nhắn", None, "Moodle Web Service /\nmáy chủ thư",
+     [("CẢNH BÁO SINH VIÊN\n+ MẪU TIN", True, False), ("HÀNG ĐỢI TIN NHẮN\n+ NHẬT KÝ CAN THIỆP", True, True)]),
 ]
 
 
@@ -126,7 +131,7 @@ def dfd(code, user, process, device_in, device_out, stores) -> str:
 
 def context_diagram() -> str:
     """DFD mức ngữ cảnh: toàn hệ thống là một xử lý, 4 tác nhân ngoài."""
-    w, h = 1120, 520
+    w, h = 1120, 590       # v1.2: thêm hàng "Kênh gửi tin" phía dưới
     cx, cy, r = 560, 190, 105
     p = ['<defs><marker id="ah" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">'
          '<path d="M0,0 L10,4 L0,8 z" fill="#222"/></marker></defs>', f'<rect width="{w}" height="{h}" fill="#fff"/>',
@@ -149,16 +154,21 @@ def context_diagram() -> str:
     p.append(label((220 + cx - r) / 2, cy + 62, "biểu đồ, báo cáo Excel/PDF,\ntài khoản, tệp sao lưu"))
     p.append(box(w - 220, cy - 40, 200, 80, "Giảng viên"))
     p.append(line(w - 220, cy - 22, cx + edge(22), cy - 22))
-    p.append(label((w - 220 + cx + r) / 2, cy - 60, "chọn môn, bộ lọc,\nghi nhận can thiệp"))
+    p.append(label((w - 220 + cx + r) / 2, cy - 60, "chọn môn, bộ lọc, luật của môn,\ntin nhắn, ghi nhận can thiệp"))
     p.append(line(cx + edge(22), cy + 22, w - 222, cy + 22))
     p.append(label((w - 220 + cx + r) / 2, cy + 62, "danh sách cảnh báo, chi tiết SV,\ntiến độ lớp, tệp Excel/PDF"))
     # Bộ lập lịch (dưới trái) và Moodle (dưới phải): chỉ luồng vào
-    p.append(box(170, h - 100, 200, 70, "Bộ lập lịch ETL"))
-    p.append(line(370, h - 70, cx - 70, cy + 78))
-    p.append(label(330, h - 160, "kích hoạt job theo lịch"))
-    p.append(box(w - 370, h - 100, 200, 70, "Moodle LMS\n(CSDL moodle_src)"))
-    p.append(line(w - 370, h - 70, cx + 70, cy + 78))
-    p.append(label(w - 250, h - 165, "khóa học, ghi danh, nhật ký,\nđiểm danh, bài nộp (chỉ đọc)"))
+    base = 520                                    # hàng tác nhân phía dưới giữ vị trí của bản 1.1
+    p.append(box(170, base - 100, 200, 70, "Bộ lập lịch ETL"))
+    p.append(line(370, base - 70, cx - 70, cy + 78))
+    p.append(label(330, base - 160, "kích hoạt job theo lịch"))
+    p.append(box(w - 370, base - 100, 200, 70, "Moodle LMS\n(CSDL moodle_src)"))
+    p.append(line(w - 370, base - 70, cx + 70, cy + 78))
+    p.append(label(w - 250, base - 165, "khóa học, ghi danh, nhật ký,\nđiểm danh, bài nộp (chỉ đọc)"))
+    # Kênh gửi tin (v1.2): luồng duy nhất đi ra ngoài hệ thống
+    p.append(box(cx - 150, h - 80, 300, 60, "Kênh gửi tin\n(Moodle Web Service, máy chủ thư)"))
+    p.append(line(cx, cy + r, cx, h - 82))
+    p.append(label(cx, 405, "tin nhắn Moodle, email\ngửi cho sinh viên"))
     return f'<svg id="dfd_ngu_canh" xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">{"".join(p)}</svg>'
 
 

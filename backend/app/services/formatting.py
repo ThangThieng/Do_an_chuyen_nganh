@@ -9,7 +9,7 @@ from backend.app.core.config import TZ
 
 RISK_LABELS = {"RED": "Nguy cơ cao", "YELLOW": "Cần lưu ý", "GREEN": "An toàn"}
 RISK_COLORS = {"RED": "D64545", "YELLOW": "B07F00", "GREEN": "2E9D5B"}   # vàng đậm hơn #E0A100 để đọc được trên nền trắng
-NEVER_ACCESSED = "Chưa truy cập"
+NEVER_ACCESSED = "Chưa có hoạt động"
 NO_DATA = "–"       # tỷ lệ NULL = chưa có dữ liệu (migration V007), khác với 0%
 
 

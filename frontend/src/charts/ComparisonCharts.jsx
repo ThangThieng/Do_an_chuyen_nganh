@@ -53,13 +53,14 @@ const valueLabels = {
     meta.data.forEach((el, i) => {
       if (values[i] == null) return;
       const text = opts.format(values[i]);
-      if (opts.horizontal) {
-        ctx.textAlign = "left";
-        ctx.fillText(text, el.x + 5, el.y + 4);
-      } else {
-        ctx.textAlign = "center";
-        ctx.fillText(text, el.x, el.y - 6);
-      }
+      // Nền trắng sau nhãn: đường tham chiếu (trung bình) đi ngang qua đầu cột không đè lên số
+      const w = ctx.measureText(text).width;
+      const [x, y] = opts.horizontal ? [el.x + 5, el.y + 4] : [el.x - w / 2, el.y - 6];
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.fillRect(x - 2, y - 10, w + 4, 13);
+      ctx.fillStyle = CHROME.ink;
+      ctx.textAlign = "left";
+      ctx.fillText(text, x, y);
     });
     ctx.restore();
   },
@@ -67,7 +68,8 @@ const valueLabels = {
 
 const referenceLine = {
   id: "referenceLine",
-  afterDatasetsDraw(chart, _, opts) {
+  // Vẽ trước cột: cột và nhãn giá trị (có nền trắng) nằm trên đường, số không bị gạch ngang
+  beforeDatasetsDraw(chart, _, opts) {
     if (opts?.value == null) return;
     const { ctx, chartArea: a, scales } = chart;
     ctx.save();

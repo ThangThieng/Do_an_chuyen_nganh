@@ -32,3 +32,25 @@ def test_epoch_uses_local_timezone():
 def test_invalid_start_raises(bad):
     with pytest.raises(ValueError):
         academic_term(bad)
+
+
+# ---------------------------------------------------------------- học kỳ ghi trong tên danh mục (chỉ để đối chiếu)
+from etl.transform.semester import category_term  # noqa: E402
+
+
+@pytest.mark.parametrize("year, term, expected", [
+    ("Năm học 2026 - 2027", "Học kỳ 1", ("2026-2027", 1)),
+    ("Năm học 2024-2025", "Học kỳ 2", ("2024-2025", 2)),
+    ("Năm học 2026 - 2027", "Học kỳ 3", ("2026-2027", 3)),
+    ("Bộ môn Hệ thống Thông tin", "Khoa Công nghệ Thông tin", None),   # dữ liệu giả: không có cấp năm học/học kỳ
+    ("Năm học 2026 - 2028", "Học kỳ 1", None),
+    (None, None, None),
+])
+def test_category_term(year, term, expected):
+    assert category_term(year, term) == expected
+
+
+def test_category_term_accepts_decomposed_vietnamese():
+    import unicodedata
+    assert category_term("Năm học 2026 - 2027", unicodedata.normalize("NFD", "Học kỳ 1")) == ("2026-2027", 1)
+    assert category_term("Năm học 2026 - 2027", "Học kì 2") == ("2026-2027", 2)

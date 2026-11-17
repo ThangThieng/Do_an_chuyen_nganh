@@ -156,7 +156,7 @@ def live_blockers(settings: MessagingSettings, channel: str, check_ok: bool) -> 
     if not settings.allow_live:
         reasons.append("MESSAGING_ALLOW_LIVE chưa bật")
     if is_clock_frozen():
-        reasons.append("hệ thống đang chạy dữ liệu demo (LMS_AS_OF đang đặt)")
+        reasons.append("hệ thống đang xem dữ liệu tại một mốc cố định trong quá khứ (LMS_AS_OF đang đặt)")
     if not check_ok:
         reasons.append("chưa kiểm tra kết nối thành công với cấu hình hiện tại (Hệ thống › Kênh gửi tin)")
     return reasons

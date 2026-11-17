@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { downloadFile, errorMessage } from "../../api/client.js";
 import { useFacultyCourses, useFilters, useReportPreview } from "../../api/hooks.js";
 import { RiskBadge } from "../../components/common.jsx";
-import TermFilterBar from "../../components/TermFilterBar.jsx";
+import TermFilterBar, { isSingleFaculty } from "../../components/TermFilterBar.jsx";
 import { RISK, RISK_LEVELS } from "../../theme/tokens.js";
 import { fmtDate, fmtDateTime, fmtDaysSince, fmtDecimal, fmtInt, fmtPercent } from "../../utils/format.js";
 
@@ -41,7 +41,12 @@ export default function AdminReports() {
     if (filters && !form.academic_year) setForm((f) => ({ ...f, ...filters.current }));
   }, [filters, form.academic_year]);
 
-  const courses = useFacultyCourses(form.faculty_id, form.academic_year ? { academic_year: form.academic_year, semester: form.semester } : null, "shortname", "asc");
+  // Chỉ một khoa: danh sách môn lấy luôn của khoa đó (không bắt chọn khoa trước), lọc thêm theo bộ môn
+  const single = isSingleFaculty(filters);
+  const courseFaculty = form.faculty_id ?? (single ? filters.faculties[0].id : undefined);
+  const courses = useFacultyCourses(courseFaculty, form.academic_year ? { academic_year: form.academic_year, semester: form.semester } : null, "shortname", "asc");
+  const courseOptions = (courses.data?.items ?? []).filter((c) => !form.category_id || c.category_id === form.category_id)
+    .map((c) => ({ value: c.course_id, label: `${c.shortname} – ${c.fullname}` }));
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
   const params = useMemo(() => {
@@ -51,6 +56,7 @@ export default function AdminReports() {
     }
     return {
       ...base, academic_year: form.academic_year, semester: form.semester, faculty_id: form.faculty_id,
+      category_id: form.category_id,
       course_id: form.course_id, to: form.to?.format("YYYY-MM-DD"),
       risk_level: form.report_type === "risk" ? form.risk_level : undefined,
     };
@@ -87,10 +93,11 @@ export default function AdminReports() {
         {form.report_type !== "traffic" ? (
           <>
             <TermFilterBar filters={filters} term={form} onTermChange={(t) => set({ ...t, course_id: undefined })}
-              facultyId={form.faculty_id} onFacultyChange={(faculty_id) => set({ faculty_id, course_id: undefined })} />
-            <Select aria-label="Môn học" style={{ width: 240 }} allowClear placeholder={form.faculty_id ? "Tất cả môn" : "Chọn khoa để lọc môn"}
-              disabled={!form.faculty_id} value={form.course_id} onChange={(course_id) => set({ course_id })}
-              options={(courses.data?.items ?? []).map((c) => ({ value: c.course_id, label: `${c.shortname} – ${c.fullname}` }))}
+              facultyId={form.faculty_id} onFacultyChange={(faculty_id) => set({ faculty_id, course_id: undefined })}
+              departmentId={form.category_id} onDepartmentChange={(category_id) => set({ category_id, course_id: undefined })} />
+            <Select aria-label="Môn học" style={{ width: 240 }} allowClear placeholder={courseFaculty ? "Tất cả môn" : "Chọn khoa để lọc môn"}
+              disabled={!courseFaculty} value={form.course_id} onChange={(course_id) => set({ course_id })}
+              options={courseOptions}
               showSearch optionFilterProp="label" />
             {form.report_type === "risk" && (
               <Select aria-label="Mức rủi ro" style={{ width: 170 }} allowClear placeholder="Mọi mức rủi ro" value={form.risk_level}

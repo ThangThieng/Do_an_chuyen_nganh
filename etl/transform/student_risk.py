@@ -10,6 +10,7 @@ from datetime import datetime
 
 import pandas as pd
 
+from common.person_name import full_name
 from etl.config import TZ
 from etl.extract.course_data import CourseDataset
 from etl.rules import default_params
@@ -19,6 +20,7 @@ from etl.transform.semester import academic_term
 WEEK_SECONDS = 7 * 86_400
 ATTENDED_ACRONYMS = ("P", "L", "E")     # có mặt, trễ, vắng có phép
 ABSENT_ACRONYM = "A"
+GRADEBOOK_SCALE = 100                   # chuyên cần từ sổ điểm quy về thang 100 (= phần trăm)
 KEYS = ["course_id", "user_id"]
 COUNT_COLUMNS = ["total_sessions", "attended_sessions", "absent_sessions", "total_assignments",
                  "submitted_assignments", "late_submissions", "tracked_activities", "completed_activities"]
@@ -34,13 +36,45 @@ RISK_COLUMNS = (
     "attendance_status", "total_assignments", "submitted_assignments", "missing_assignments_count",
     "late_submissions", "completion_rate", "score_attendance", "score_inactivity", "score_assignment",
     "risk_score", "risk_level", "risk_reasons", "weekly_activity", "assignment_detail", "class_avg_access",
-    "rule_set_id", "max_consecutive_missing", "attendance_detail", "etl_run_id",
+    "rule_set_id", "max_consecutive_missing", "attendance_detail", "attendance_source", "etl_run_id",
 )
 
 
 def percent(part: float, whole: float) -> float | None:
     """Tỷ lệ %, làm tròn 2 chữ số. Mẫu số 0 = chưa có dữ liệu -> None (lưu NULL, không phải 0% – migration V007)."""
     return round(100 * part / whole, 2) if whole else None
+
+
+def _present_percent(points: float, max_points: float) -> int:
+    """Tỷ lệ có mặt theo sổ điểm, làm tròn half-up về số nguyên 0–100."""
+    ratio = min(max(points / max_points, 0.0), 1.0) if max_points > 0 else 0.0
+    return int(math.floor(ratio * GRADEBOOK_SCALE + 0.5))
+
+
+def gradebook_attendance(ds: CourseDataset) -> pd.DataFrame:
+    """(môn, SV) có điểm chuyên cần trong sổ điểm -> total/attended/absent theo thang 100 (gộp mọi mục điểm danh)."""
+    grades = ds.attendance_grades
+    columns = KEYS + ["total_sessions", "attended_sessions", "absent_sessions"]
+    if grades.empty:
+        return pd.DataFrame(columns=columns)
+    total = grades.groupby(KEYS, as_index=False)[["points", "max_points"]].sum()
+    present = [_present_percent(p, m) for p, m in zip(total["points"], total["max_points"])]
+    return total[KEYS].assign(total_sessions=GRADEBOOK_SCALE, attended_sessions=present,
+                              absent_sessions=[GRADEBOOK_SCALE - x for x in present])[columns]
+
+
+def effective_assignments(ds: CourseDataset) -> pd.DataFrame:
+    """
+    Bài tập / bài kiểm tra được tính ở C3. Bỏ mục ĐÃ TỚI HẠN mà cả lớp không ai nộp (tới AS_OF): dữ liệu thật có giảng
+    viên dùng hoạt động "Bài tập" để đăng giáo trình, bài giảng ("Giáo trình CTDL&GT", "Bài giảng buổi 1") – không phải
+    bài cần nộp trên Moodle, nếu tính thì mọi SV đều "thiếu bài" (12/11/2026: 26 mục, 1.697 lượt thiếu oan).
+    """
+    asg = ds.assignments
+    if asg.empty:
+        return asg
+    due = asg["duedate"] < ds.as_of_ts
+    submitted = asg.assign(sub=asg["submitted_ts"].notna()).groupby(["course_id", "assign_id"])["sub"].transform("any")
+    return asg[~due | submitted]
 
 
 def student_metrics(ds: CourseDataset) -> pd.DataFrame:
@@ -53,8 +87,17 @@ def student_metrics(ds: CourseDataset) -> pd.DataFrame:
                   .groupby(KEYS, as_index=False)
                   .agg(total_sessions=("session_id", "count"), attended_sessions=("attended", "sum"),
                        absent_sessions=("absent", "sum")))
+    attendance["attendance_source"] = "SESSIONS"
+    from_grades = gradebook_attendance(ds)
+    if not from_grades.empty:                       # chỉ dùng cho SV không có dữ liệu theo buổi
+        seen = set(zip(attendance["course_id"], attendance["user_id"]))
+        keep = [key not in seen for key in zip(from_grades["course_id"], from_grades["user_id"])]
+        attendance = pd.concat([attendance, from_grades[keep].assign(attendance_source="GRADEBOOK")],
+                               ignore_index=True)
+        counts = ["total_sessions", "attended_sessions", "absent_sessions"]
+        attendance[counts] = attendance[counts].astype("int64")
 
-    asg = ds.assignments
+    asg = effective_assignments(ds)
     due = asg["duedate"] < ds.as_of_ts
     submitted = asg["submitted_ts"].notna()
     submitted_late = (asg["submitted_ts"] > asg["duedate"]).fillna(False).astype(bool)
@@ -69,6 +112,7 @@ def student_metrics(ds: CourseDataset) -> pd.DataFrame:
                .merge(assignments, on=KEYS, how="left")
                .merge(completion, on=KEYS, how="left"))
     metrics[COUNT_COLUMNS] = metrics[COUNT_COLUMNS].fillna(0).astype("int64")
+    metrics["attendance_source"] = metrics["attendance_source"].fillna("SESSIONS")
     metrics["missing_assignments_count"] = metrics["total_assignments"] - metrics["submitted_assignments"]
     return metrics
 
@@ -89,16 +133,23 @@ def _iso_local(epoch) -> str | None:
 
 def attendance_detail_by_student(ds: CourseDataset) -> dict[tuple[int, int], list[dict]]:
     """(môn, SV) -> [{attendance_id, name, sessions, absent}] theo từng hoạt động điểm danh (luật “vắng n buổi …”)."""
+    out: dict[tuple[int, int], list[dict]] = defaultdict(list)
+    for g in ds.attendance_grades.itertuples(index=False):      # sổ điểm: mỗi mục điểm danh một dòng, thang 100
+        present = _present_percent(float(g.points), float(g.max_points))
+        out[(int(g.course_id), int(g.user_id))].append(dict(
+            attendance_id=int(g.attendance_id), name=str(g.attendance_name), sessions=GRADEBOOK_SCALE,
+            absent=GRADEBOOK_SCALE - present, source="GRADEBOOK"))
     att = ds.attendance
     if att.empty:
-        return {}
+        return out
     if "attendance_id" not in att.columns:          # dữ liệu cũ/kiểm thử: một hoạt động điểm danh mỗi môn
         att = att.assign(attendance_id=0, attendance_name="Điểm danh")
     grouped = (att.assign(absent=att["acronym"].isna() | (att["acronym"] == ABSENT_ACRONYM))
                .groupby(KEYS + ["attendance_id", "attendance_name"], as_index=False)
                .agg(sessions=("session_id", "count"), absent=("absent", "sum"))
                .sort_values(KEYS + ["attendance_id"]))
-    out: dict[tuple[int, int], list[dict]] = defaultdict(list)
+    for key in set(zip(grouped["course_id"].astype(int), grouped["user_id"].astype(int))):
+        out.pop(key, None)                          # SV có dữ liệu theo buổi: bỏ chi tiết lấy từ sổ điểm
     for g in grouped.itertuples(index=False):
         out[(int(g.course_id), int(g.user_id))].append(dict(
             attendance_id=int(g.attendance_id), name=str(g.attendance_name), sessions=int(g.sessions),
@@ -148,16 +199,19 @@ def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int,
         cell[1] += int(a.acronym in ATTENDED_ACRONYMS)
 
     assignments: dict[tuple, list[dict]] = defaultdict(list)
-    for a in ds.assignments.itertuples(index=False):
+    for a in effective_assignments(ds).itertuples(index=False):
         is_submitted = not pd.isna(a.submitted_ts)
         status = "submitted" if is_submitted else ("missing" if a.duedate < as_of_ts else "not_due")
         assignments[(int(a.course_id), int(a.user_id))].append(dict(
-            assign_id=int(a.assign_id), name=a.assign_name, duedate=_iso_local(a.duedate), status=status,
+            assign_id=int(a.assign_id), name=a.assign_name, kind=getattr(a, "kind", "assign"),
+            duedate=_iso_local(a.duedate), status=status,
             submitted_at=_iso_local(a.submitted_ts), late=bool(is_submitted and a.submitted_ts > a.duedate)))
 
     class_median_14d = metrics.groupby("course_id")["access_count_14d"].median().to_dict()
     class_avg_access = metrics.groupby("course_id")["total_access_count"].mean().to_dict()
 
+    log_start = (datetime.fromtimestamp(ds.log_start_ts, TZ).strftime("%d/%m/%Y")
+                 if getattr(ds, "log_start_ts", None) else None)
     rows = []
     for m in metrics.itertuples(index=False):
         key = (int(m.course_id), int(m.user_id))
@@ -179,6 +233,7 @@ def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int,
             days_since_last_access=days_since, access_count_14d=m.access_count_14d,
             total_assignments=m.total_assignments, missing_assignments_count=m.missing_assignments_count,
             max_consecutive_missing=consecutive, attendance_detail=att_detail,
+            attendance_source=m.attendance_source, log_start=log_start,
         ), float(class_median_14d[key[0]]), thresholds=params["thresholds"], weights=params["weights"],
             level_rules=params["level_rules"], extra_rules=params.get("extra_rules", ()))
 
@@ -187,15 +242,18 @@ def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int,
         for week in range(1, _course_weeks(course, as_of_ts) + 1):
             views, actions = weekly.get(key, {}).get(week, (0, 0))
             held, present = attendance_weeks.get(week, (0, 0))
+            # Tuần kết thúc trước dòng log đầu tiên (môn mở trước khi có nhật ký): "chưa có nhật ký", không phải 0 lượt
+            week_end = int(course.startdate) + week * WEEK_SECONDS
+            no_log = bool(ds.log_start_ts) and week_end <= int(ds.log_start_ts)
             weekly_activity.append(dict(week=week, views=views, actions=actions, sessions=held, present=present,
-                                        attended=(present == held) if held else None))
+                                        attended=(present == held) if held else None, no_log=no_log))
 
         rows.append(dict(
             snapshot_date=snapshot_date, course_id=key[0], user_id=key[1],
             faculty_id=int(course.faculty_id), faculty_name=course.faculty_name,
             course_shortname=course.course_shortname, course_fullname=course.course_fullname,
             academic_year=academic_year, semester=semester, teacher_ids=[int(t) for t in course.teacher_ids],
-            student_code=person.student_code, student_name=f"{person.lastname} {person.firstname}".strip(),
+            student_code=person.student_code, student_name=full_name(person.lastname, person.firstname, key[1]),
             email=person.email,
             total_access_count=int(m.total_access_count), access_count_7d=int(m.access_count_7d),
             access_count_14d=int(m.access_count_14d), active_actions=int(m.active_actions),
@@ -212,6 +270,6 @@ def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int,
             weekly_activity=weekly_activity, assignment_detail=details,
             class_avg_access=round(float(class_avg_access[key[0]]), 2),
             rule_set_id=int(rule_set_id), max_consecutive_missing=consecutive, attendance_detail=att_detail,
-            etl_run_id=run_id,
+            attendance_source=m.attendance_source, etl_run_id=run_id,
         ))
     return rows

@@ -77,10 +77,10 @@ def test_risk_rows_for_diligent_student():
     assert r["student_name"] == "Nguyễn Văn An"
     assert (r["academic_year"], r["semester"], r["teacher_ids"]) == ("2026-2027", 1, [5, 7])
     assert r["weekly_activity"] == [
-        dict(week=1, views=10, actions=1, sessions=1, present=1, attended=True),
-        dict(week=2, views=0, actions=0, sessions=1, present=1, attended=True),
-        dict(week=3, views=5, actions=0, sessions=1, present=1, attended=True),
-        dict(week=4, views=0, actions=0, sessions=0, present=0, attended=None),
+        dict(week=1, views=10, actions=1, sessions=1, present=1, attended=True, no_log=False),
+        dict(week=2, views=0, actions=0, sessions=1, present=1, attended=True, no_log=False),
+        dict(week=3, views=5, actions=0, sessions=1, present=1, attended=True, no_log=False),
+        dict(week=4, views=0, actions=0, sessions=0, present=0, attended=None, no_log=False),
     ]
     assert [(a["name"], a["status"], a["late"]) for a in r["assignment_detail"]] == \
         [("Bài tập 1", "submitted", False), ("Bài tập 2", "submitted", False)]
@@ -92,7 +92,7 @@ def test_risk_rows_for_never_accessed_student():
     assert (r["total_sessions"], r["attended_sessions"], r["absent_sessions"]) == (3, 1, 2)
     assert r["absence_rate"] == 66.67
     assert r["last_access_time"] is None and r["days_since_last_access"] is None
-    assert r["risk_reasons"] == ["Vắng 2/3 buổi (67%)", "Chưa từng truy cập môn học", "Thiếu 1/1 bài tập"]
+    assert r["risk_reasons"] == ["Vắng 2/3 buổi (67%)", "Không có hoạt động nào được ghi nhận trong môn", "Thiếu 1/1 bài tập"]
     assert [a["status"] for a in r["assignment_detail"]] == ["missing", "not_due"]
     assert r["class_avg_access"] == 20.0
     assert r["email"] is None
@@ -102,8 +102,19 @@ def test_all_null_epoch_columns_are_supported():
     """Hồi quy: đầu học kỳ chưa có bài nộp / chưa ai truy cập -> cột toàn NULL (kiểu object) không được làm hỏng Transform."""
     rows = rows_by_user(dataset(submitted_101=(None, None), last_access_101=None))
     assert rows[101]["days_since_last_access"] is None
-    assert rows[101]["missing_assignments_count"] == 1
-    assert [a["status"] for a in rows[101]["assignment_detail"]] == ["missing", "not_due"]
+    # Bài 1 đã tới hạn nhưng cả lớp không ai nộp -> không tính (effective_assignments); bài 2 chưa tới hạn
+    assert rows[101]["missing_assignments_count"] == 0
+    assert [a["status"] for a in rows[101]["assignment_detail"]] == ["not_due"]
+
+
+def test_due_item_nobody_submitted_is_not_counted():
+    """Hoạt động "Bài tập" dùng để đăng tài liệu: đã tới hạn, cả lớp không ai nộp -> không phải bài thiếu."""
+    from etl.transform.student_risk import effective_assignments
+    ds = dataset(submitted_101=(None, None))
+    assert set(effective_assignments(ds)["assign_id"]) == set(ds.assignments["assign_id"]) - {
+        a for a, d in zip(ds.assignments["assign_id"], ds.assignments["duedate"]) if d < ds.as_of_ts}
+    ds = dataset()                                   # có SV nộp bài 1 -> bài 1 vẫn tính cho cả lớp
+    assert set(effective_assignments(ds)["assign_id"]) == set(ds.assignments["assign_id"])
 
 
 def test_late_submission_is_counted():

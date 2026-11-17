@@ -11,7 +11,6 @@ docs
 tests
 perf
 scripts
-mockdata/output
 frontend/node_modules
 frontend/dist
 frontend/e2e/screenshots

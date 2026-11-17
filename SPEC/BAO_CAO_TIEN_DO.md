@@ -2,7 +2,7 @@
 
 > Đề tài: Trực quan hóa dữ liệu hệ thống LMS Moodle phục vụ công tác quản lý và hỗ trợ giảng dạy
 > Kế hoạch gốc: [KE_HOACH_TRIEN_KHAI.md](KE_HOACH_TRIEN_KHAI.md) (v1.0 – 14/09/2026)
-> Cập nhật: 01/10/2026 (phiên bản 1.1 – bổ sung nhánh Hệ thống, Danh mục, Trợ giúp; báo cáo môn học)
+> Cập nhật: 16/11/2026 (chuyển sang dữ liệu Moodle 3.11 thật của trường, xem mục 2.12 và 3.9); trước đó: 10/10/2026 (phiên bản 1.2), 01/10/2026 (phiên bản 1.1)
 > Trạng thái: **Đã hoàn thành Bước 1 (CSDL phân tích), Bước 2 (Mock data + ETL), Bước 3 (Backend API), Bước 4 (Frontend) và Phần 6 (kiểm thử, hiệu năng, E2E, triển khai Docker).** Còn lại phần cần người thật tham gia: khảo sát ý kiến giảng viên (UAT), viết báo cáo, slide và video demo.
 
 ---
@@ -25,6 +25,7 @@
 | **Triển khai (6.4)** | Docker Compose, Nginx, script, README chạy demo | 5 dịch vụ, một lệnh `docker compose up`, README hướng dẫn | ✅ Xong |
 | **Phiên bản 1.1 (01/10/2026)** | – | Đổi mật khẩu, quản lý người dùng, nhật ký ETL, danh mục môn học, sao lưu/phục hồi, trang Trợ giúp, menu 5 nhánh; migration V008 | ✅ Xong (xem mục 2.10) |
 | Báo cáo môn Phân tích và thiết kế phần mềm | – | `docs/bao_cao/BaoCao_PTTK_LMS_Analytics.docx` (78 trang) + sơ đồ UML/DFD trong `docs/diagrams` | ✅ Xong (còn thiếu GVHD, lớp, bảng phân công) |
+| **Dữ liệu Moodle thật (16/11/2026)** | Kế hoạch gốc chỉ dùng dữ liệu giả lập (Phần 3) | Nạp 27 bảng CSV của Moodle 3.11 (173 môn Khoa CNTT) vào `moodle_src_real`, ETL sang `lms_analytics_real`; dữ liệu giả giữ nguyên ở `moodle_src` + `lms_analytics`; chuyển qua lại bằng 3 dòng `.env` | ✅ Xong (còn thiếu một số bảng, xem mục 2.12) |
 | UAT với giảng viên, slide, video (6.1, 6.5) | – | Cần người thật tham gia | ⏳ Chưa làm |
 
 **Kiểm thử hiện tại (01/10/2026, phiên bản 1.1), tất cả đều pass:**
@@ -301,8 +302,73 @@ Thực hiện theo [kế hoạch v1.2](../docs/gop_y_giao_dien/TongHop_GopY_Giao
 | 73 | Hạ tầng gửi tin (G5) | `common/messaging` (cấu hình + chốt chặn 3 điều kiện, mẫu tin, SMTP/file .eml, Moodle REST, hàng đợi chống trùng, thử lại 1–5–15 phút); máy chủ Moodle 3.9 mô phỏng `tools/moodle_ws_stub` (hộp tin `/stub/inbox`); job `auto_prompt`, `message_dispatch`; `cli messaging-check`; `lms.ps1 moodle-stub | etl | messaging-check`; dịch vụ `moodle-stub` trong Docker |
 | 74 | Chức năng 2 (G6) | Trung tâm Can thiệp (Cần liên hệ, Đã gửi kèm mã xác nhận và liên kết hộp tin, Nhắc tự động, Mẫu tin), trình soạn tin trong cửa sổ chi tiết, trang Hệ thống › Kênh gửi tin |
 | 75 | Giao diện chung (G7) | Bỏ icon/thông tin gây nhiễu; Tổng quan Macro (tròn + xu hướng, so sánh khoa, tô nổi khoa theo mức), trang Khoa, trang Môn học, cấp Sinh viên trên URL (`?student=`), ngăn "Nguồn & cách tính", phân tích điểm rủi ro, Trợ giúp đọc luật từ API |
-| 76 | Kiểm thử & tài liệu (G8) | pytest @@PYTEST@@ · vitest 10 · E2E 57 (gồm WCAG 14 màn hình, responsive 7 trang × 4 độ rộng) · EXPLAIN 94 câu ≤ 8,9 ms · Locust p95 28 ms/0 lỗi · ảnh chụp mới `docs/images/report` · README, TAI_LIEU_HE_THONG, KET_QUA_KIEM_THU cập nhật |
+| 76 | Kiểm thử & tài liệu (G8) | pytest 354 · vitest 10 · E2E 57 (gồm WCAG 14 màn hình, responsive 7 trang × 4 độ rộng) · EXPLAIN 94 câu ≤ 8,9 ms · Locust p95 28 ms/0 lỗi · ảnh chụp mới `docs/images/report` · README, TAI_LIEU_HE_THONG, KET_QUA_KIEM_THU cập nhật |
 | 77 | Lỗi tìm ra khi kiểm thử v1.2 (đã sửa) | Trang Khoa lỗi SQL; sao lưu thiếu 6 bảng mới + phục hồi chậm; máy chủ Moodle mô phỏng lỗi 500 với POST (thiếu `python-multipart`); "sinh viên duy nhất" quét toàn bảng (700 ms → 7 ms); trình soạn tin gọi xem trước rỗng sau khi gửi; thông báo che menu; nhiều lỗi tương phản/nhãn WCAG và lỗi bố cục ở 390 px |
+
+### 2.12 Chuyển sang dữ liệu Moodle 3.11 thật (16/11/2026)
+
+Thực hiện theo [kế hoạch chuyển đổi](../docs/du_lieu_that/KE_HOACH_CHUYEN_DOI_DU_LIEU_THAT.md) với 4 mốc phê duyệt; nhật ký
+từng mốc ở mục 8 của kế hoạch. Thống kê bảng đã nhận và bảng còn thiếu:
+[ThongKe_BangDuLieu_DaCo_VaCanBoSung.docx](../docs/du_lieu_that/ThongKe_BangDuLieu_DaCo_VaCanBoSung.docx).
+Nguyên tắc: một bộ mã chạy được cả dữ liệu giả và dữ liệu thật; migration chỉ cộng thêm; dữ liệu giả không bị ghi đè.
+
+| # | Hạng mục | Chi tiết |
+|---|---|---|
+| 78 | Hai môi trường song song | Dữ liệu giả: `moodle_src` + `lms_analytics`, mốc tính `2026-11-06T10:30:00+07:00`. Dữ liệu thật: `moodle_src_real` + `lms_analytics_real`, mốc tính `2026-11-12T15:00:00+07:00` (lấy theo mốc cuối của dữ liệu nhận được). Chuyển bằng 3 dòng `MOODLE_DB_NAME`, `ANALYTICS_DB_NAME`, `LMS_AS_OF` trong `.env`; `.env` hiện trỏ dữ liệu thật, bản cũ lưu ở `var/env.mock.bak` (không đưa lên git) |
+| 79 | Migration CSDL nguồn V006–V009 | V006 sổ điểm (`mdl_grade_categories`, `mdl_grade_items`, `mdl_grade_grades`, `mdl_scale`); V007 quiz, `mdl_assign_grades`, `mdl_groupings`; V008 `mdl_assign_overrides`, `mdl_assign_user_flags`, `mdl_quiz_overrides`; V009 vùng đệm `stg`. Áp dụng cho cả hai CSDL nguồn; trên dữ liệu giả các bảng mới để rỗng |
+| 80 | Gói nạp `ingest/` | `python -m ingest.run --data-dir <thư mục CSV> --batch 2026-11`. File CSV của trường không có dòng tiêu đề nên thứ tự cột khai báo trong `ingest/moodle311.py`; `manifest.py` khai báo file, phạm vi và kiểm tra bản ghi mồ côi; nạp qua vùng đệm `stg` (mọi cột kiểu text) rồi mới ép kiểu vào `mdl_*`. Chỉ nạp 173 môn thuộc danh mục Khoa CNTT. Không nạp cột nhạy cảm (`ip` và `other` của nhật ký, mật khẩu quiz, khóa ghi danh). Lệnh từ chối chạy trên `moodle_src` |
+| 81 | Kết quả nạp | 27 bảng: 173 môn, 2.995 người dùng, 10.851 lượt ghi danh, 2.165 bài tập, 79.384 bản nộp, 163.913 điểm, 362.904 dòng nhật ký (13/09–12/11/2026). Loại 1 dòng người dùng lỗi định dạng (tài khoản hệ thống). File danh mục thiếu cấp 1–2 nên bổ sung 4 danh mục cha suy ra từ dữ liệu |
+| 82 | Migration CSDL phân tích V015 | Cột `attendance_source` ('SESSIONS' hoặc 'GRADEBOOK', mặc định 'SESSIONS') trong `fact_student_risk_summary`. Áp dụng cho cả hai CSDL phân tích |
+| 83 | ETL | Xem mục 3.9. Backfill 13/09–12/11/2026 trên dữ liệu thật mất 186 giây |
+| 84 | Kết quả ngày 12/11/2026 | 39 môn được tính, 2.288 lượt ghi danh, 1.201 sinh viên; Xanh 671 / Vàng 921 / Đỏ 696. C1 lấy từ sổ điểm: 795 lượt (612 đạt, 41 cảnh báo, 142 nghiêm trọng), 1.493 lượt chưa có dữ liệu chuyên cần. Tỷ lệ hoàn thành: chưa có dữ liệu ở cả 39 môn. Lưu lượng: 1.456 giờ, 360.169 sự kiện, 0 lượt đăng nhập |
+| 85 | Đối soát | So với truy vấn độc lập trên CSDL nguồn, các số sau khớp: lượt ghi danh 2.288; bài đến hạn 16.492, đã nộp 10.282, nộp trễ 2.037; lượt truy cập 331.705; chưa từng truy cập 192; sự kiện lưu lượng 360.169. Xanh + Vàng + Đỏ = sĩ số ở mọi môn |
+| 86 | API và giao diện | 57 đường dẫn API không đổi; hai lược đồ `RiskStudent`, `StudentDetailOut` thêm 1 trường tùy chọn `attendance_source`. Giao diện hiển thị "theo sổ điểm" thay cho "x/y buổi" khi nguồn là sổ điểm; cột chuyên cần trong báo cáo xuất ra ghi "N% (sổ điểm)" |
+| 87 | Kiểm thử hồi quy trên dữ liệu giả | Trước khi sửa mã: 353 đạt / 1 không đạt (354 ca, 40 phút 52 giây). Sau khi sửa: 345 đạt / 1 không đạt, 8 ca sao lưu–khôi phục không chạy lại. Ca không đạt ở cả hai lần là `test_ground_truth_precision_recall`: lỗi `UnicodeEncodeError` khi in ma trận nhầm lẫn tiếng Việt ra đầu ra mã hóa cp1252 (do chuyển hướng kết quả vào file), không phải sai số liệu. Chạy lại riêng ca này với `PYTHONIOENCODING=utf-8` thì đạt (recall Đỏ 99,3%, precision Đỏ 86,5%) |
+| 88 | Kiểm tra trên dữ liệu thật | 24 API GET không tham số và 17 API GET có tham số trả 200. `frontend/e2e/real_data_probe.mjs` mở 13 màn hình của quản trị và giảng viên: không có lỗi JavaScript, không có phản hồi API lỗi. Bộ kiểm thử tích hợp và E2E tự động vẫn viết cho dữ liệu giả, chưa có bộ tương ứng cho dữ liệu thật |
+| 89 | Tài khoản trên dữ liệu thật | 23 giảng viên (đồng bộ từ dữ liệu) và 1 tài khoản `admin` tạo trực tiếp. Mật khẩu ban đầu là chuỗi ngẫu nhiên không lưu lại, phải đặt bằng `python -m backend.app.cli set-password --username <tên>` trước khi dùng |
+
+**Dữ liệu nhà trường không cung cấp được (chốt ngày 16/11/2026: thiếu vĩnh viễn, hệ thống chạy hẳn với các bảng đang có):**
+
+| Thiếu | Cách hệ thống xử lý | Ghi chú |
+|---|---|---|
+| `course_modules_completion` | Tỷ lệ hoàn thành hiện "Chưa có dữ liệu" | Nếu sau này có file: đặt vào thư mục dữ liệu, chạy lại `ingest.run` rồi backfill, không cần sửa mã |
+| `assign_overrides`, `assign_user_flags` | Dùng hạn nộp chung của bài tập | Như trên |
+| `quiz_overrides` | Chưa dùng (ETL hiện không đọc quiz) | – |
+| 4 bảng plugin điểm danh | C1 lấy từ mục điểm danh trong sổ điểm (112 môn có mục này); luật "vắng n buổi" không áp dụng | Đây là cách tính chính thức cho dữ liệu thật |
+| Sự kiện đăng nhập trong nhật ký | Số lượt đăng nhập = 0 | – |
+| `course_categories` cấp 1–2 | 4 danh mục cha suy ra từ dữ liệu; trang quản trị chỉ có 1 khoa | – |
+| Nhật ký trước 13/09/2026 | Tuần đầu của biểu đồ xu hướng có tỷ lệ Đỏ cao vì chưa ghi nhận lượt truy cập nào trước ngày này | – |
+| Phiên đăng nhập theo thời gian | "Online hiện tại" = 0 (file chỉ chụp tối 12/11, sau mốc tính 15:00) | – |
+
+### 2.13 Báo cáo Word cập nhật lên phiên bản 1.2 (16/11/2026)
+
+`docs/bao_cao/BaoCaoPhanTichThietKePhanMem.docx` (137 trang, trước đó 108) được sửa trực tiếp, giữ nguyên style, lưới cột của các bảng cũ, giãn dòng và bề rộng ảnh; bản trước khi sửa ở `var/backup_bao_cao/`.
+
+| Chương | Nội dung bổ sung |
+|---|---|
+| 1 | Phạm vi v1.2 (góp ý giao diện, luật theo môn, can thiệp), dữ liệu 5 khoa, dữ liệu thật |
+| 2 | YC19–YC25, QĐ10 (luật riêng của môn), QĐ11 (gửi tin); bảng trách nhiệm; tác nhân Máy chủ thư; đặc tả UC18, UC19; DFD ngữ cảnh mới, DFD thiết lập luật và gửi tin (vẽ lại bằng `docs/diagrams/tools/gen_dfd.py`) |
+| 3 | Gói gửi tin, gói `ingest`, 8 job, 6 dịch vụ Docker, ánh xạ lớp → mã |
+| 4 | 14 bảng phân tích (thêm mô tả 6 bảng mới), cột mới của 3 bảng fact và `app_user`, `intervention_log` |
+| 5 | Ảnh chụp v1.2, trang Khoa, ngăn Nguồn & cách tính, MH14–MH16 |
+| 6 | Dữ liệu 5 khoa, ma trận đáp án đo lại 16/11 (recall 99,3%, precision 86,5%), kiểm thử 354/10/57, hiệu năng v1.2, lỗi tìm ra ở v1.2 và khi chuyển dữ liệu thật |
+| 7 | Kết quả, hạn chế, hướng phát triển theo v1.2; dữ liệu thiếu ghi là thiếu vĩnh viễn |
+
+8 hình UML (2.1–2.4, 3.1, 3.13, 4.1, 5.1) được vẽ lại từ `docs/diagrams/src/*.puml` bằng PlantUML 1.2024.7 (bố cục smetana, cùng phiên bản đã vẽ các hình khác). Hình 2.1 (`uc_tong_quat`) đặt phân hệ Giảng viên cạnh phân hệ Quản trị cho đỡ cao; smetana vẽ lệch ra ngoài khung ở hình này nên ảnh được xuất qua SVG rồi chụp lại bằng Chrome với khung bao đã nới, và trong Word giữ chiều cao khung cũ thay vì bề rộng để chữ đủ lớn. Các hình khác giữ bề rộng cũ.
+
+### 2.14 Gỡ bỏ dữ liệu mô phỏng (16/11/2026)
+
+Theo yêu cầu của chủ dự án, hệ thống chỉ giữ dữ liệu Moodle thật do thầy cô cung cấp. Không giữ bản sao lưu dữ liệu mô phỏng.
+
+| Hạng mục | Đã làm |
+|---|---|
+| CSDL | Xóa `moodle_src` (2,6 GB), `lms_analytics` (1,3 GB), `lms_analytics_etlbench`; còn `moodle_src_real`, `lms_analytics_real` |
+| Mã nguồn | Xóa `mockdata/` (kể cả tệp đáp án `ground_truth_profiles.csv`), `etl/jobs/reset_demo.py` (lệnh này chỉ chặn khi đồng hồ không cố định, nên có thể xóa nhầm dữ liệu thật vốn cũng dùng `LMS_AS_OF`), `perf/build_x10.py`, `perf/etl_bench.py`, `var/env.mock.bak` |
+| Kiểm thử | Xóa `tests/mockdata/`, `tests/integration/test_etl_pipeline.py` và 3 kịch bản E2E kiểm tra nội dung dữ liệu mô phỏng (`admin`, `system`, `teacher.spec.js`). Giữ các nhóm không phụ thuộc dữ liệu mô phỏng: 155 ca không cần CSDL đạt. Nhóm API và ràng buộc CSDL ghi tạm dữ liệu thử nên chỉ chạy trên bản sao CSDL phân tích, chưa chạy lại |
+| Docker, lệnh tắt | `init` không sinh dữ liệu mô phỏng: nạp CSV thật từ `REAL_DATA_DIR` (gắn chỉ đọc) rồi backfill từ 13/09; tên CSDL `moodle_src_real`, `lms_analytics_real`; `lms.ps1`/`Makefile`: bỏ `seed`, `mock`, thêm `ingest`; `.env.example` trỏ dữ liệu thật. Chưa dựng lại image Docker để thử |
+| Tài liệu | README viết lại phần cài đặt, tài khoản (không ghi tên giảng viên thật), dữ liệu không có trong repo; `perf/README.md` ghi chú. Số đo v1.0–v1.2 trong `docs/KET_QUA_KIEM_THU.md` và báo cáo Word giữ nguyên vì là kết quả đã đo trên dữ liệu mô phỏng |
+
+Hệ quả: không còn chuyển qua lại giữa hai bộ dữ liệu bằng `.env`; không còn "đáp án" để đo độ phủ, độ chính xác của luật cảnh báo (cần kiểm thử chấp nhận với giảng viên).
 
 ## 3. NHỮNG THAY ĐỔI SO VỚI KẾ HOẠCH VÀ LÝ DO
 
@@ -411,6 +477,51 @@ Mọi endpoint, tham số và dạng response của 5.1 đều có. Các thay đ
 | 56 | E2E bằng Playwright (6.3) | Bước này mới có script kiểm tra nhanh `npm run smoke` (playwright-core + Chrome có sẵn, không tải trình duyệt) | Dùng để kiểm chứng giao diện ngay trong bước làm Frontend. Bộ E2E đầy đủ để lại cho giai đoạn kiểm thử (6.3) |
 | 57 | Nginx phục vụ bản build, proxy `/api` (6.4) | Hiện chạy bằng Vite dev server có proxy `/api` | Triển khai Docker/Nginx thuộc giai đoạn 6.4 |
 
+### 3.9 Thay đổi khi chuyển sang dữ liệu thật (16/11/2026)
+
+| # | Kế hoạch | Thực tế | Lý do |
+|---|---|---|---|
+| 90 | Nguồn là Moodle 3.9, chỉ dùng dữ liệu giả lập (Phần 3) | Thêm nguồn Moodle 3.11 thật nạp từ CSV; dữ liệu giả giữ song song | Trường cung cấp bản xuất CSV, không cho kết nối trực tiếp CSDL Moodle. Các bảng ETL đọc có cùng cột ở 3.9 và 3.11 |
+| 91 | C1 tính từ số buổi của plugin `mod_attendance` (1.6) | Môn không có dữ liệu theo buổi thì lấy mục điểm danh trong sổ điểm (`mdl_grade_items.itemmodule = 'attendance'` + `mdl_grade_grades`), quy về thang 100; ghi nguồn vào `attendance_source`. Ngưỡng C1 giữ nguyên | Đợt dữ liệu nhận được không có 4 bảng của plugin. Với nguồn sổ điểm chỉ có tỷ lệ, không có số buổi, nên luật theo môn kiểu "vắng n buổi" không áp dụng |
+| 92 | C3 so với `duedate` của bài tập (1.6) | Hạn hiệu lực: gia hạn (`extensionduedate`) > hạn riêng sinh viên > hạn riêng nhóm (`sortorder` nhỏ nhất) > `duedate` | Đúng thứ tự Moodle áp dụng. Hiện ba bảng liên quan chưa có dữ liệu nên kết quả bằng hạn chung |
+| 93 | Môn đang diễn ra: `enddate >= hôm nay` (1.2) | Thêm: môn `enddate = 0` chỉ tính khi `startdate` nằm trong học kỳ chứa mốc tính | Moodle của trường có nhiều môn không đặt ngày kết thúc; nếu tính hết thì môn của các học kỳ trước cũng bị cảnh báo. Kết quả: 39 trên 173 môn |
+| 94 | Tỷ lệ hoàn thành tính cho mọi môn (1.7) | `NULL` ("Chưa có dữ liệu") khi môn không bật theo dõi hoàn thành hoặc chưa có bản ghi hoàn thành nào | Thiếu bảng `course_modules_completion`; giá trị 0% sẽ gây hiểu sai (cùng nguyên tắc với #46) |
+| 95 | MSSV lấy từ `mdl_user.idnumber` | `idnumber` trống thì lấy cụm 7 chữ số trong `username` | Cột `idnumber` của dữ liệu thật gần như trống. Cách suy ra này chưa được đối chiếu với danh sách MSSV chính thức |
+| 96 | Nạp dữ liệu nguồn bằng `mockdata/` | Thêm gói `ingest/` và vùng đệm `stg` | CSV thật không có dòng tiêu đề, có dòng lỗi định dạng và bản ghi mồ côi, cần bước kiểm tra trước khi ghi vào `mdl_*` |
+| 97 | 5 khoa (dữ liệu giả v1.2) | Dữ liệu thật chỉ có Khoa CNTT | Phạm vi dữ liệu trường cung cấp. Phần so sánh giữa các khoa chỉ có một cột |
+| 98 | Bộ môn = danh mục chứa trực tiếp môn (1.3) | Bộ môn = danh mục cấp 2 trên đường dẫn danh mục; nhãn hiển thị "Bộ môn / Chuyên ngành" (trang Khoa, Danh mục, báo cáo BM1) | Moodle của trường đặt môn ở cấp 4 (Khoa › Chuyên ngành › Năm học › Học kỳ) nên trước đây cột Bộ môn hiện "Học kỳ 1". Dữ liệu giả không đổi (58/58 môn giữ nguyên). Dữ liệu thật: 3 nhóm (Kỹ thuật phần mềm 8 môn, Mạng và Truyền thông 4, Cơ sở ngành 27); đã backfill lại 13/09–12/11 |
+| 99 | Năm học, học kỳ suy từ ngày bắt đầu môn | Giữ nguyên; ETL ghi cảnh báo khi học kỳ ghi trong tên danh mục khác học kỳ theo ngày bắt đầu | Tên danh mục ghi không thống nhất và dữ liệu giả không có cấp này. Dữ liệu thật có 2 môn lệch (13816 nằm trong danh mục năm học 2025–2026, 13982 trong Học kỳ 2), vẫn tính theo ngày bắt đầu theo quyết định của chủ dự án ngày 16/11/2026 |
+| 100 | Tin nhắn diễn đạt chuyên cần theo số buổi | Câu chuyên cần dùng chung một hàm (`common/attendance_text.py`) cho lý do cảnh báo và tin nhắn; thêm biến `{chuyen_can}`; với môn lấy chuyên cần từ sổ điểm, `{so_buoi_vang}`, `{tong_buoi}` ghi "không rõ" và trình soạn tin hiện lời nhắc | Trước đây tin gửi sinh viên môn dùng sổ điểm ghi "em đã vắng 25/100 buổi". Lý do cảnh báo trong bảng giữ đúng câu cũ |
+| 101 | Biểu đồ hoạt động theo tuần luôn có chú thích "có mặt đủ buổi / có buổi vắng" | Chú thích chỉ hiện khi có ít nhất một tuần có buổi điểm danh; còn lại ghi lý do (chuyên cần theo sổ điểm, hoặc môn không có dữ liệu điểm danh) | Trên dữ liệu thật 0/39 môn có điểm danh theo tuần |
+| 102 | `risk_score` = 100 × Σ(trọng số × điểm) ÷ 2 trên cả 3 tiêu chí | Tiêu chí không có dữ liệu (môn không có điểm danh; SV chưa có bài tới hạn) không tính: chia cho tổng trọng số của các tiêu chí còn lại; giao diện ghi "không áp dụng". Đủ 3 tiêu chí thì như công thức gốc. Luật xếp mức giữ nguyên | Dữ liệu thật: 25/39 môn không có điểm danh, C1 = 0 làm điểm thấp giả tạo. Ngưỡng "tổng ≥ 4" của mức Nguy cơ cao co theo số tiêu chí có dữ liệu: 2 tiêu chí → tổng ≥ 3, 1 tiêu chí → ≥ 2 (`red_total_threshold`, quyết định của chủ dự án 17/11/2026). Ngày 12/11: 97 lượt Vàng → Đỏ (95 ở môn không có điểm danh, 2 chưa có bài tới hạn); phân bố Đỏ 796 / Vàng 882 / Xanh 610 |
+| 103 | Tiến độ theo chương = % hoàn thành hoạt động | Môn không có dữ liệu hoàn thành: % SV đã mở ít nhất một nội dung của chương, từ nhật ký (`section_access.sql`, khóa `access_rate`); mọi chỗ "Hoàn thành" (thanh, đường, cột, báo cáo BM1) tự ẩn khi không có dữ liệu | Không có `mdl_course_modules_completion` (thiếu vĩnh viễn) |
+| 104 | C3 chỉ tính bài tập có `duedate` | Bài không đặt hạn: dùng `cutoffdate`, rồi `gradingduedate`; thêm bài kiểm tra trắc nghiệm có ngày đóng (`assign_id` âm, `kind = quiz`), "đã nộp" = có lượt làm hoàn thành trước mốc tính | Dữ liệu thật: 399 bài không hạn (86 bài trong học kỳ có hạn chấm), 150 quiz chưa dùng. Ngày 12/11: lượt ghi danh chưa có bài tới hạn 400 → 213; 70 lượt đổi mức (Xanh 671 → 610, Vàng 921 → 979, Đỏ 696 → 699) |
+| 105 | "Online hiện tại" lấy từ `mdl_sessions` | Bảng phiên không có dòng nào trước mốc tính thì dùng ước tính từ nhật ký, giao diện ghi "ước tính từ nhật ký" | Bản xuất chỉ chụp phiên buổi tối 12/11 |
+| 106 | Luôn hiện lượt đăng nhập, đăng nhập lỗi, truy cập từ app | Ẩn khi toàn bộ bằng 0 (tooltip, bảng, báo cáo BM3) | Nhật ký không có các sự kiện này |
+| 107 | Đồ thị xu hướng vẽ từ ngày đầu có dữ liệu | Bỏ các ngày chưa đủ 7 ngày nhật ký (ở đây trước 20/09/2026), kèm ghi chú | Nhật ký bắt đầu 13/09, tuần đầu gần như mọi SV "chưa từng truy cập" |
+| 108 | So sánh giữa các khoa | Chỉ có 1 khoa thì tự so sánh các bộ môn / chuyên ngành (`/admin/compare/faculties?group=department`); nhấn một bộ môn mở trang Khoa đã lọc sẵn bộ môn đó (`?dept=`); đường trung bình ghi "TB toàn khoa"; trang Khoa ẩn các dòng "so với toàn trường" | Dữ liệu thật chỉ có Khoa CNTT |
+| 109 | Đường chuyên cần theo thời gian | Môn lấy chuyên cần từ sổ điểm: không vẽ đường, thanh ghi "giá trị hiện tại" | Sổ điểm không lưu lịch sử |
+| 110 | Luật bổ sung "vắng n buổi" chọn được ở mọi môn | Khóa ở môn không có số buổi điểm danh, gợi ý "Tỷ lệ vắng" | Luật không bao giờ khớp |
+| 111 | MSSV | Chú thích nguồn (idnumber, hoặc suy từ tên đăng nhập) trong cửa sổ chi tiết và trang Trợ giúp | `idnumber` trống ở 2.993/2.995 người |
+| 112 | Mọi môn đang diễn ra đều được thống kê | Môn không có ai mang vai trò giảng viên / trợ giảng thì bỏ khỏi thống kê (`courses.sql`); vai trò gán cho tài khoản vắng trong tệp `mdl_user` vẫn được tính là có giảng viên | Dữ liệu thật 12/11: loại 1 môn (UDCNTT-AVK49AE, 39 SV). Hai môn qtmlinux_ctk47mmt và virtualization_ctk47mmt có giảng viên là tài khoản id 3 (vắng trong `dlu_user.csv` đợt 2): ingest bổ sung tài khoản vắng từ file đợt 1 (`stg.user_batch1`, chỉ có tên đăng nhập), họ tên lấy từ tệp sửa tên |
+| 114 | Lưu lượng theo giờ tính trọn giờ chứa AS_OF | Giờ chứa AS_OF chỉ đếm log tới AS_OF (`job_traffic`) | File log thật kéo dài tới 20:51 12/11, giờ 15:00 bị đếm 1.266 sự kiện sau mốc (dữ liệu giả không có log sau mốc nên không lộ) |
+| 115 | Heatmap N tuần | Đầu khoảng lùi về ngày đầu có log, phụ đề ghi "nhật ký chỉ có từ …, chưa đủ N tuần" (`limited`) | Chọn 12 tuần từng ghi "Trung bình 20/08 – 11/11" khi log bắt đầu 13/09 |
+| 116 | Lọc theo khoa ở mọi màn hình | Dữ liệu một khoa: ô chọn khoa thay bằng ô chọn bộ môn (Tổng quan, Danh mục, Báo cáo; API `filters.departments`, báo cáo `category_id`); trang Khoa lọc theo bộ môn thì KPI, biểu đồ tròn, xu hướng (`risk-trend?category_id=`), đường trung bình tính riêng bộ môn; Danh mục ẩn cột Khoa; Báo cáo không bắt chọn khoa trước khi chọn môn | Dữ liệu thật chỉ có Khoa CNTT (quyết định của chủ dự án 17/11/2026) |
+| 117 | C2 tính từ lần truy cập cuối trong logstore; không có log = "Chưa từng truy cập môn học" | Hoạt động cuối = mốc muộn nhất giữa log, lần nộp bài (`mdl_assign_submission`) và lần làm bài kiểm tra (`mdl_quiz_attempts`); không có gì thì lý do ghi "Không có hoạt động nào trong môn từ <ngày đầu của nhật ký>" | Log thật chỉ có từ 13/09/2026, nhiều môn mở từ tháng 8: 192 lượt ghi danh không có log, 95 trong số đó có bài nộp (85 nộp trước 13/09) |
+| 118 | Heatmap tô theo số requests | Heatmap "Mức độ truy cập" tô theo số người online trung bình (đổi được: người truy cập trong giờ / lượt hoạt động), kèm gợi ý 3 khung 3 giờ vắng nhất để bảo trì và 3 giờ đông nhất cần giám sát; "Requests" đổi thành "Lượt hoạt động"; Top 10 giờ xếp theo số người online | Mục đích của chức năng là lập lịch bảo trì / giám sát (yêu cầu của chủ dự án 17/11/2026). Log thật chỉ gồm hoạt động trong các môn (không có đăng nhập, trang chủ, ứng dụng điện thoại) nên là ước tính thấp hơn tải thật – ghi rõ trên giao diện |
+| 119 | Moodle mô phỏng ghi tin vào CSDL nguồn | Đọc người dùng / ghi danh từ CSDL nguồn (chỉ đọc), ghi tài khoản dịch vụ và tin nhắn vào CSDL riêng `moodle_stub` (`MOODLE_STUB_DB_NAME`, tự tạo) | CSDL nguồn là bản sao dữ liệu thật; dữ liệu thật không có tài khoản `lmsanalytics` nên kênh Moodle mô phỏng trước đó luôn lỗi |
+| 120 | Kiểm thử Backend chạy trên CSDL đang dùng | Chạy trên bản sao `lms_analytics_test`, `moodle_src_test`, `moodle_stub_test` (`python -m scripts.make_test_db`); thiếu bản sao thì bỏ qua; bài kiểm thử không còn gắn với số liệu của dữ liệu giả (5 khoa, > 10.000 dòng, tuần T1…) | Tránh ghi dữ liệu kiểm thử vào dữ liệu thật |
+| 121 | Lịch HK1 2026-2027 ghi "dữ liệu mô phỏng" | Giữ ngày 07/09 – 20/12/2026, ghi chú "lịch tạm, chưa đối chiếu lịch chính thức của trường" (migration V016) | Chưa có lịch chính thức |
+| 122 | C3 tính mọi bài tập / bài kiểm tra hiển thị trong môn | Bài có Hạn chế truy cập theo nhóm (`course_modules.availability`, điều kiện "group" cấp ngoài) chỉ tính cho SV trong nhóm | Môn gộp nhiều lớp giao bài riêng từng lớp (36 mục); dữ liệu giả không có hạn chế truy cập |
+| 123 | Mọi bài đã tới hạn đều tính | Mục đã tới hạn mà cả lớp không ai nộp (tới AS_OF) không tính (`effective_assignments`) | Giảng viên dùng hoạt động Bài tập để đăng giáo trình / bài giảng: 26 mục, 1.697 lượt "thiếu bài" oan ngày 12/11 |
+| 124 | Hoạt động theo tuần vẽ từ tuần 1 của môn | Tuần kết thúc trước dòng log đầu tiên được đánh dấu `no_log`, biểu đồ để trống kèm chú thích | 21 môn mở từ tháng 8, log bắt đầu 13/09: tuần 1–6 hiện 0 lượt như thể SV không học |
+| 125 | SV "có tương tác" = có log từ ngày bắt đầu môn | Thêm: không có log nào nhưng có bài nộp / bài kiểm tra (ETL `total_active_students` và API `IS_ACTIVE_IN_TERM` cùng định nghĩa); cột "Truy cập cuối" đổi thành "Hoạt động cuối" | Khớp với C2 (mục 117) |
+| 126 | Trang Tiến độ lớp vẽ từ ngày dữ liệu đầu | Bỏ ngày / tuần kết thúc trước khi đủ 7 ngày log (`hidden_before`, như đồ thị xu hướng rủi ro) | Tuần 07/09 chỉ có 1 ngày log: "SV hoạt động" ≈ 3, tỷ lệ nộp 20% |
+| 127 | Heatmap nhiều chế độ | Theo yêu cầu chủ dự án: chỉ một biểu đồ "Giờ đông / giờ vắng" (số người online TB), một dòng tóm tắt giờ đông nhất / khung vắng nhất | Chỉ cần biết giờ đông / vắng |
+| 113 | Họ tên = `lastname firstname` | Hàm `common/person_name.py` tự đảo hai ô khi tài khoản nhập ngược (ô firstname chứa họ đệm), chỉ khi chắc chắn. Tên cần sửa tay (thêm dấu…) đặt trong `var/name_overrides.csv` (biến `LMS_NAME_OVERRIDES`), ngoài git vì chứa tên thật. Dùng cho cả ETL (tên SV) và `cli sync-users` (tên tài khoản web) | 15/23 giảng viên và 4 sinh viên bị nhập ngược. Tên đăng nhập (viết tắt theo họ tên) khớp với thứ tự mới ở cả 15 tài khoản |
+
+Không đổi: ngưỡng và luật xếp mức (#19), cấu trúc 3 bảng fact ngoài cột thêm ở V015, đường dẫn API, loại biểu đồ.
+
 ### 2.9 Phần 6 – Kiểm thử, hiệu năng và triển khai
 
 Số liệu đầy đủ trong [docs/KET_QUA_KIEM_THU.md](../docs/KET_QUA_KIEM_THU.md). Tóm tắt:
@@ -445,6 +556,11 @@ Số liệu đầy đủ trong [docs/KET_QUA_KIEM_THU.md](../docs/KET_QUA_KIEM_T
 | Demo online thời gian thực (`live_sessions.py`) | 3.3 ghi chú 4 | Xem #9 |
 | Dọn CSDL dùng cho đo hiệu năng | – | `lms_analytics_x10` (2,6 GB), `moodle_src_x4` (2,0 GB), `lms_analytics_etlbench` – xóa được bằng `DROP DATABASE` khi không cần đo lại |
 | Bộ đếm đăng nhập sai dùng chung khi chạy nhiều worker | – | Hiện nằm trong bộ nhớ của một tiến trình; khi triển khai nhiều worker cần Redis hoặc bảng CSDL |
+| ~~Bổ sung dữ liệu thật còn thiếu~~ | 2.12 | Không làm: ngày 16/11/2026 chủ dự án xác định phần thiếu là vĩnh viễn; hệ thống dùng các bảng đang có |
+| Đặt mật khẩu tài khoản trên dữ liệu thật | 2.12 #89 | 23 giảng viên + `admin`, dùng `cli set-password` |
+| Kiểm thử tự động cho dữ liệu thật | 2.12 #88 | Bộ tích hợp/E2E hiện chỉ đúng với dữ liệu giả; trên dữ liệu thật mới có đối soát thủ công và script kiểm tra 13 màn hình |
+| Sửa ca `test_ground_truth_precision_recall` khi đầu ra không phải UTF-8 | 2.12 #87 | Hiện phải đặt `PYTHONIOENCODING=utf-8` khi chuyển hướng kết quả pytest vào file trên Windows |
+| Đối chiếu MSSV suy ra từ `username` | 3.9 #95 | Cần danh sách MSSV chính thức hoặc cột `idnumber` đầy đủ |
 | Đổi mật khẩu tài khoản demo | – | Mật khẩu tạm `Lms@2026demo` chỉ dùng cho môi trường local |
 
 ---
@@ -476,3 +592,19 @@ $env:LMS_DEMO_PASSWORD = "<mật khẩu demo>"; npm run smoke # kiểm tra bằn
 > Nếu CSDL phân tích đã có từ trước V007: chạy `python -m database.migrate up --target analytics` rồi `python -m etl.jobs.backfill --from 2026-09-07`.
 
 > Đổi `LMS_AS_OF` thì phải chạy lại `generate_activity --reset` và `backfill`.
+
+### 5.1 Chạy với dữ liệu thật
+
+```powershell
+# .env: MOODLE_DB_NAME=moodle_src_real, ANALYTICS_DB_NAME=lms_analytics_real, LMS_AS_OF=2026-11-12T15:00:00+07:00
+python -m database.migrate up --target moodle
+python -m database.migrate up --target analytics
+python -m ingest.run --data-dir "<thư mục CSV, đặt ngoài repo>" --batch 2026-11
+python -m etl.jobs.backfill --from 2026-09-13             # ~3 phút
+python -m backend.app.cli sync-users
+python -m backend.app.cli set-password --username <tên>
+```
+
+> Quay lại dữ liệu giả: đổi 3 dòng trên về `moodle_src`, `lms_analytics`, `2026-11-06T10:30:00+07:00` rồi khởi động lại backend và ETL. Biến môi trường cùng tên ghi đè `.env`, dùng được để chạy pytest trên dữ liệu giả mà không sửa file.
+
+> File CSV dữ liệu thật và ảnh chụp màn hình có tên người thật không đặt trong repo.

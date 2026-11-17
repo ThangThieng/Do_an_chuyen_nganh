@@ -133,6 +133,7 @@ export default function MessageComposer({ courseId, students, defaultChannels = 
               aria-label="Hạn liên hệ sau số ngày" />
           </Space>
           <ModeBanner modes={modes.data} channels={channels} />
+          {(preview.data?.notices ?? []).map((n) => <Alert key={n} type="warning" showIcon={false} style={{ marginBottom: 8 }} message={n} />)}
           {preview.isPending || !current ? <Skeleton active paragraph={{ rows: 8 }} /> : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>

@@ -44,11 +44,13 @@ def enrollment_by_faculty(selected: tuple[str, int] = Depends(term), conn: Conne
 def faculty_courses(faculty_id: int = Path(ge=1), selected: tuple[str, int] = Depends(term),
                     sort: Literal["active_rate", "enrolled", "active", "red_count", "red_rate", "shortname",
                                   "fullname"] = "active_rate",
-                    order: Literal["asc", "desc"] = "desc", conn: Connection = Depends(get_conn)) -> dict:
+                    order: Literal["asc", "desc"] = "desc",
+                    category_id: int | None = Query(None, ge=1, description="chỉ tính phần tóm tắt cho một bộ môn"),
+                    conn: Connection = Depends(get_conn)) -> dict:
     items = admin_repo.faculty_courses(conn, faculty_id, selected[0], selected[1], today(), sort, order)
     if not items:
         raise not_found("Khoa không có môn học nào trong học kỳ đã chọn")
-    summary = admin_repo.faculty_summary(conn, faculty_id, selected[0], selected[1], today())
+    summary = admin_repo.faculty_summary(conn, faculty_id, selected[0], selected[1], today(), category_id)
     return {"faculty_id": faculty_id, "academic_year": selected[0], "semester": selected[1], "items": items,
             "summary": summary, "data_updated_at": stamp(conn)}
 
@@ -98,19 +100,22 @@ def traffic_heatmap(weeks: int = Query(4, ge=1, le=12), conn: Connection = Depen
 # ============================================================================ phiên bản 1.2 – so sánh, xu hướng, cấp Môn học
 @router.get("/compare/faculties", response_model=FacultyCompareOut,
             summary="So sánh giữa các Khoa: quy mô, tỷ lệ tương tác, phân bố rủi ro, so với tuần trước")
-def compare_faculties(selected: tuple[str, int] = Depends(term), conn: Connection = Depends(get_conn)) -> dict:
-    data = admin_repo.compare_faculties(conn, selected[0], selected[1], today())
+def compare_faculties(selected: tuple[str, int] = Depends(term),
+                      group: Literal["faculty", "department"] = "faculty",
+                      conn: Connection = Depends(get_conn)) -> dict:
+    data = admin_repo.compare_faculties(conn, selected[0], selected[1], today(), group)
     return {**data, "academic_year": selected[0], "semester": selected[1], "data_updated_at": stamp(conn)}
 
 
 @router.get("/risk-trend", response_model=RiskTrendOut,
             summary="Xu hướng tỷ lệ Đỏ/Vàng/Xanh theo tuần/ngày cho toàn trường, một khoa hoặc một môn")
 def risk_trend(selected: tuple[str, int] = Depends(term), faculty_id: int | None = Query(None, ge=1),
+               category_id: int | None = Query(None, ge=1, description="một bộ môn / chuyên ngành"),
                course_id: int | None = Query(None, ge=1), granularity: Literal["week", "day"] = "week",
                conn: Connection = Depends(get_conn)) -> dict:
     data = trends_repo.risk_trend(conn, selected[0], selected[1], today(), granularity, faculty_id=faculty_id,
-                                  course_id=course_id)
-    scope = "course" if course_id else "faculty" if faculty_id else "school"
+                                  course_id=course_id, category_id=category_id)
+    scope = "course" if course_id else "department" if category_id else "faculty" if faculty_id else "school"
     return {**data, "academic_year": selected[0], "semester": selected[1], "scope": scope,
             "data_updated_at": stamp(conn)}
 

@@ -26,7 +26,7 @@ from common.messaging import auto_prompt, compose
 from common.messaging.config import (CHANNEL_EMAIL, CHANNEL_MOODLE, MessagingConfigError, MessagingSettings,
                                      load_settings)
 from common.messaging.outbox import effective_modes, enqueue, now, send_now
-from common.messaging.templates import VARIABLES, TemplateError, validate_template
+from common.messaging.templates import VARIABLES, TemplateError, session_variable_notice, validate_template
 
 router = APIRouter(prefix="/teacher", tags=["Trung tâm can thiệp"])
 
@@ -147,8 +147,9 @@ def preview(body: PreviewIn, access: CourseAccess = Depends(course_access), conn
                                 sender=compose.teacher(conn, access.teacher_id), today=today(),
                                 contact_days=body.contact_days)
     modes = effective_modes(conn, settings)
+    notice = session_variable_notice(subject, text, rows)
     return {"snapshot_date": snapshot, "channels": {ch: {"mode": m, "warnings": w} for ch, (m, w) in modes.items()},
-            "drafts": [d.__dict__ for d in drafts]}
+            "drafts": [d.__dict__ for d in drafts], "notices": [notice] if notice else []}
 
 
 class SendItem(BaseModel):

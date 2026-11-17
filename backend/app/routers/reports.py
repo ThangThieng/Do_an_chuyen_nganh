@@ -24,6 +24,7 @@ def report_filters(
     report_type: ReportType = Query(..., description="enrollment | traffic | risk"),
     selected: tuple[str | None, int | None] = Depends(optional_term),
     faculty_id: int | None = Query(None, ge=1),
+    category_id: int | None = Query(None, ge=1, description="bộ môn / chuyên ngành"),
     course_id: int | None = Query(None, ge=1),
     risk_level: RiskLevel | None = Query(None, description="Chỉ áp dụng cho báo cáo risk"),
     from_date: date | None = Query(None, alias="from", description="Báo cáo traffic: ngày bắt đầu"),
@@ -36,7 +37,7 @@ def report_filters(
     if from_date and to_date and from_date > to_date:
         raise unprocessable("`from` phải không muộn hơn `to`")
     filters = reports_repo.ReportFilters(report_type=report_type, academic_year=academic_year, semester=semester,
-                                         faculty_id=faculty_id, course_id=course_id,
+                                         faculty_id=faculty_id, category_id=category_id, course_id=course_id,
                                          risk_level=risk_level if report_type == "risk" else None,
                                          from_date=from_date, to_date=to_date)
     if report_type == "traffic":
@@ -58,6 +59,9 @@ def describe(conn: Connection, f: reports_repo.ReportFilters) -> list[tuple[str,
     if f.faculty_id is not None:
         names = {x["id"]: x["name"] for x in common_repo.filters(conn, today())["faculties"]}
         lines.append(("Khoa", names.get(f.faculty_id, f"#{f.faculty_id}")))
+    if f.category_id is not None:
+        names = {x["id"]: x["name"] for x in common_repo.filters(conn, today())["departments"]}
+        lines.append(("Bộ môn / Chuyên ngành", names.get(f.category_id, f"#{f.category_id}")))
     if f.course_id is not None:
         header = admin_repo.course_header(conn, f.course_id, today())
         lines.append(("Môn học", f"{header['shortname']} – {header['fullname']}" if header else f"#{f.course_id}"))
@@ -73,7 +77,7 @@ def filters_dict(f: reports_repo.ReportFilters) -> dict:
         start, end = reports_repo.traffic_range(f, today())
         return {"from": start, "to": end}
     return {"academic_year": f.academic_year, "semester": f.semester, "faculty_id": f.faculty_id,
-            "course_id": f.course_id, "risk_level": f.risk_level, "to": f.to_date}
+            "category_id": f.category_id, "course_id": f.course_id, "risk_level": f.risk_level, "to": f.to_date}
 
 
 def filename_stem(f: reports_repo.ReportFilters) -> str:
@@ -91,7 +95,7 @@ def preview(filters: reports_repo.ReportFilters = Depends(report_filters),
     return {
         "report_type": filters.report_type, "title": reports_repo.report_title(filters.report_type),
         "columns": [{"key": c.key, "title": c.title, "kind": c.kind}
-                    for c in reports_repo.report_columns(filters.report_type)],
+                    for c in reports_repo.visible_columns(filters.report_type, items)],
         "items": items, "total": total, "page": page, "page_size": page_size,
         "filters": filters_dict(filters), "data_updated_at": stamp(conn),
     }

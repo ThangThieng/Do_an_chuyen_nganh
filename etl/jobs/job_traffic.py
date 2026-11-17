@@ -77,8 +77,9 @@ def compute(ctx: JobContext, *, from_hour: datetime | None = None, to_hour: date
         frames, chunk = [], start
         while chunk < end:
             chunk_end = min(chunk + timedelta(days=TRAFFIC_CHUNK_DAYS), end)
+            # Giờ chứa AS_OF chỉ đếm tới AS_OF: file xuất có thể chứa log sau mốc tính (dữ liệu thật: tới 20:51 12/11)
             frames.append(read_frame(conn, extract_sql("traffic_hourly"), {
-                "from_ts": _epoch(chunk), "to_ts": _epoch(chunk_end), "tz": APP_TIMEZONE,
+                "from_ts": _epoch(chunk), "to_ts": min(_epoch(chunk_end), as_of_ts + 1), "tz": APP_TIMEZONE,
                 "login_event": LOGIN_EVENT, "failed_login_event": FAILED_LOGIN_EVENT}))
             chunk = chunk_end
         hourly = pd.concat(frames, ignore_index=True)
@@ -92,8 +93,9 @@ def compute(ctx: JobContext, *, from_hour: datetime | None = None, to_hour: date
 
         session_online = None
         if snapshot_sessions:
-            session_online = int(read_frame(conn, extract_sql("online_sessions"),
-                                            {"as_of": as_of_ts, "window": ONLINE_SLOT_SECONDS})["online_users"].iat[0])
+            sess = read_frame(conn, extract_sql("online_sessions"), {"as_of": as_of_ts, "window": ONLINE_SLOT_SECONDS})
+            if int(sess["covered"].iat[0]) > 0:        # không có phiên nào trước mốc tính: dùng ước tính từ nhật ký
+                session_online = int(sess["online_users"].iat[0])
 
     hours = time_range(local_naive(start), local_naive(end), HOUR)
     traffic = hourly_rows(hourly, hours, ctx.run_id)

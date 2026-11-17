@@ -11,10 +11,13 @@ Giống Moodle 3.9:
   - Lỗi cấp lời gọi: {"exception", "errorcode", "message"} với invalidtoken / accessexception / invalidparameter.
 Thêm cho trình diễn: /stub/inbox?userid=... (hộp tin của một người), /stub/messages?userid=... (JSON).
 
-Ghi trực tiếp vào moodle_src (các bảng mdl_* theo lược đồ Moodle 3.9 – migration moodle V005).
+CSDL: CHỈ ĐỌC người dùng / ghi danh từ CSDL nguồn (MOODLE_DB_*, dữ liệu thật của trường); mọi thứ máy chủ mô phỏng
+GHI (tài khoản dịch vụ, hội thoại, tin nhắn, tùy chọn nhận tin) nằm trong CSDL riêng MOODLE_STUB_DB_NAME
+(mặc định moodle_stub, tự tạo khi chạy lần đầu) – không bao giờ làm bẩn bản sao dữ liệu thật.
 
 Chạy:  python -m tools.moodle_ws_stub            (mặc định http://127.0.0.1:8091)
 Biến:  MOODLE_STUB_TOKENS="token1:username1,token2:username2" (mặc định lms-analytics-demo-token:lmsanalytics)
+       MOODLE_STUB_DB_NAME=moodle_stub              (CSDL ghi của máy chủ mô phỏng, cùng máy chủ PostgreSQL)
        MOODLE_STUB_MESSAGEANYUSER=true|false        (tài khoản gửi có moodle/site:messageanyuser – mặc định true)
        MOODLE_STUB_PORT=8091
 """
@@ -23,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import html
 import os
+import queue
 import re
 import time
 from contextlib import contextmanager
@@ -54,11 +58,102 @@ def can_message_any() -> bool:
     return (os.getenv("MOODLE_STUB_MESSAGEANYUSER") or "true").lower() in ("1", "true", "yes")
 
 
+# Tài khoản dịch vụ của máy chủ mô phỏng (người gửi tin): nằm trong CSDL ghi, id nằm ngoài dải id của Moodle thật.
+SERVICE_USER = (999_999_001, "lmsanalytics", "Analytics", "LMS", 0, 0)
+STUB_SCHEMA = """
+CREATE TABLE IF NOT EXISTS stub_user (
+    id BIGINT PRIMARY KEY, username VARCHAR(100) NOT NULL UNIQUE, firstname VARCHAR(100) NOT NULL,
+    lastname VARCHAR(100) NOT NULL, deleted SMALLINT NOT NULL DEFAULT 0, suspended SMALLINT NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS mdl_message_conversations (
+    id BIGSERIAL PRIMARY KEY, type SMALLINT NOT NULL DEFAULT 1, convhash VARCHAR(40), enabled SMALLINT NOT NULL DEFAULT 1,
+    timecreated BIGINT NOT NULL, timemodified BIGINT);
+CREATE INDEX IF NOT EXISTS ix_stub_conv_hash ON mdl_message_conversations (type, convhash);
+CREATE TABLE IF NOT EXISTS mdl_message_conversation_members (
+    id BIGSERIAL PRIMARY KEY, conversationid BIGINT NOT NULL REFERENCES mdl_message_conversations (id),
+    userid BIGINT NOT NULL, timecreated BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS mdl_messages (
+    id BIGSERIAL PRIMARY KEY, useridfrom BIGINT NOT NULL,
+    conversationid BIGINT NOT NULL REFERENCES mdl_message_conversations (id),
+    subject TEXT, fullmessage TEXT, fullmessageformat SMALLINT NOT NULL DEFAULT 0, fullmessagehtml TEXT,
+    smallmessage TEXT, timecreated BIGINT NOT NULL, fullmessagetrust SMALLINT NOT NULL DEFAULT 0, customdata TEXT);
+CREATE TABLE IF NOT EXISTS mdl_user_preferences (
+    id BIGSERIAL PRIMARY KEY, userid BIGINT NOT NULL, name VARCHAR(255) NOT NULL, value VARCHAR(1333) NOT NULL);
+"""
+
+
+def stub_db_name() -> str:
+    return os.getenv("MOODLE_STUB_DB_NAME") or "moodle_stub"
+
+
+def ensure_stub_db() -> None:
+    """Tạo CSDL ghi + bảng + tài khoản dịch vụ nếu chưa có (chạy lại an toàn)."""
+    cfg = load_db_config("MOODLE_DB")
+    name = stub_db_name()
+    if name == cfg.dbname:
+        raise RuntimeError("MOODLE_STUB_DB_NAME phải khác CSDL nguồn – máy chủ mô phỏng không được ghi vào dữ liệu thật")
+    with psycopg.connect(**cfg.conninfo(dbname=cfg.maintenance_db, application_name="moodle-ws-stub"),
+                         autocommit=True) as admin:
+        if admin.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone() is None:
+            admin.execute(f'CREATE DATABASE "{name}"')
+    with psycopg.connect(**cfg.conninfo(dbname=name, application_name="moodle-ws-stub"), autocommit=True) as conn:
+        conn.execute(STUB_SCHEMA)
+        conn.execute("""INSERT INTO stub_user (id, username, firstname, lastname, deleted, suspended)
+                        VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""", SERVICE_USER)
+
+
+class Conns:
+    """src: CSDL nguồn (chỉ đọc) · out: CSDL ghi của máy chủ mô phỏng."""
+
+    def __init__(self, src: psycopg.Connection, out: psycopg.Connection):
+        self.src, self.out = src, out
+
+
+# Kết nối CSDL dùng lại giữa các yêu cầu (mở kết nối PostgreSQL mới ~50 ms/lần trên Windows – gửi hàng loạt chậm).
+# Hàng đợi thread-safe: endpoint đồng bộ của FastAPI chạy trong threadpool. Mỗi phần tử là cặp (đọc nguồn, ghi stub).
+_idle: "queue.SimpleQueue[tuple[psycopg.Connection, psycopg.Connection]]" = queue.SimpleQueue()
+_POOL_MAX = 8
+_ready = False
+
+
+def _open() -> tuple[psycopg.Connection, psycopg.Connection]:
+    global _ready
+    if not _ready:
+        ensure_stub_db()
+        _ready = True
+    cfg = load_db_config("MOODLE_DB")
+    src = psycopg.connect(**cfg.conninfo(application_name="moodle-ws-stub"))
+    src.read_only = True
+    out = psycopg.connect(**cfg.conninfo(dbname=stub_db_name(), application_name="moodle-ws-stub"))
+    return src, out
+
+
 @contextmanager
 def db():
-    cfg = load_db_config("MOODLE_DB")
-    with psycopg.connect(**cfg.conninfo(application_name="moodle-ws-stub")) as conn:
-        yield conn
+    """Một giao dịch trên cặp kết nối mượn từ pool: thành công -> COMMIT, lỗi -> ROLLBACK; kết nối hỏng thì bỏ."""
+    try:
+        pair = _idle.get_nowait()
+    except queue.Empty:
+        pair = _open()
+    src, out = pair
+    try:
+        with src.transaction(), out.transaction():
+            yield Conns(src, out)
+    except BaseException:
+        if any(c.broken or c.closed for c in pair):
+            for c in pair:
+                c.close()
+            raise
+        _return(pair)
+        raise
+    _return(pair)
+
+
+def _return(pair) -> None:
+    if any(c.closed or c.broken for c in pair) or _idle.qsize() >= _POOL_MAX:
+        for c in pair:
+            c.close()
+    else:
+        _idle.put(pair)
 
 
 def error(errorcode: str, message: str, exception: str = "moodle_exception") -> JSONResponse:
@@ -98,13 +193,23 @@ def parse_params(form: dict[str, str]) -> dict:
     return out
 
 
-def user_by_username(conn, username: str):
-    return conn.execute("SELECT id, username, firstname, lastname, deleted, suspended FROM mdl_user "
-                        "WHERE username = %s AND mnethostid = 1", (username,)).fetchone()
+def user_by_username(conn: Conns, username: str):
+    """Tài khoản của token: ưu tiên tài khoản dịch vụ của máy chủ mô phỏng, sau đó người dùng Moodle thật."""
+    row = conn.out.execute("SELECT id, username, firstname, lastname, deleted, suspended FROM stub_user "
+                           "WHERE username = %s", (username,)).fetchone()
+    return row or conn.src.execute("SELECT id, username, firstname, lastname, deleted, suspended FROM mdl_user "
+                                   "WHERE username = %s AND mnethostid = 1", (username,)).fetchone()
 
 
-def share_course(conn, a: int, b: int) -> bool:
-    return conn.execute("""
+def display_name(conn: Conns, userid: int):
+    row = conn.out.execute("SELECT lastname || ' ' || firstname, username FROM stub_user WHERE id = %s",
+                           (userid,)).fetchone()
+    return row or conn.src.execute("SELECT lastname || ' ' || firstname, username FROM mdl_user WHERE id = %s",
+                                   (userid,)).fetchone()
+
+
+def share_course(conn: Conns, a: int, b: int) -> bool:
+    return conn.src.execute("""
         SELECT EXISTS (SELECT 1 FROM mdl_user_enrolments ua JOIN mdl_enrol ea ON ea.id = ua.enrolid
                        JOIN mdl_enrol eb ON eb.courseid = ea.courseid
                        JOIN mdl_user_enrolments ub ON ub.enrolid = eb.id
@@ -112,13 +217,14 @@ def share_course(conn, a: int, b: int) -> bool:
         (a, b)).fetchone()[0]
 
 
-def privacy(conn, userid: int) -> int:
-    row = conn.execute("SELECT value FROM mdl_user_preferences WHERE userid = %s AND name = 'message_blocknoncontacts'",
+def privacy(conn: Conns, userid: int) -> int:
+    row = conn.out.execute("SELECT value FROM mdl_user_preferences WHERE userid = %s AND name = 'message_blocknoncontacts'",
                        (userid,)).fetchone()
     return int(row[0]) if row else PRIVACY_COURSEMEMBER
 
 
-def conversation_for(conn, a: int, b: int, now: int) -> int:
+def conversation_for(conns: Conns, a: int, b: int, now: int) -> int:
+    conn = conns.out
     convhash = hashlib.sha1("-".join(str(x) for x in sorted((a, b))).encode()).hexdigest()
     row = conn.execute("SELECT id FROM mdl_message_conversations WHERE type = 1 AND convhash = %s", (convhash,)).fetchone()
     if row:
@@ -161,8 +267,8 @@ def send_instant_messages(conn, sender, messages: list) -> list[dict] | JSONResp
             return error("invalidparameter", "Invalid parameter value detected", "invalid_parameter_exception")
         base = {"clientmsgid": m.get("clientmsgid") or None, "text": text, "timecreated": now,
                 "useridfrom": sender_id, "candeletemessagesforallusers": False}
-        target = conn.execute("SELECT id, firstname, lastname, deleted, suspended FROM mdl_user WHERE id = %s",
-                              (touserid,)).fetchone()
+        target = conn.src.execute("SELECT id, firstname, lastname, deleted, suspended FROM mdl_user WHERE id = %s",
+                                  (touserid,)).fetchone()
         reason = None
         if target is None or target[3] == 1:
             reason = "Người dùng không tồn tại"
@@ -177,14 +283,13 @@ def send_instant_messages(conn, sender, messages: list) -> list[dict] | JSONResp
             continue
         conversation = conversation_for(conn, sender_id, touserid, now)
         fullhtml = text if fmt == FORMAT_HTML else "<p>" + html.escape(text).replace("\n", "<br>") + "</p>"
-        msgid = conn.execute("""
+        msgid = conn.out.execute("""
             INSERT INTO mdl_messages (useridfrom, conversationid, subject, fullmessage, fullmessageformat,
                                       fullmessagehtml, smallmessage, timecreated, fullmessagetrust, customdata)
             VALUES (%s, %s, NULL, %s, %s, %s, %s, %s, 0, NULL) RETURNING id""",
             (sender_id, conversation, text, fmt, fullhtml, text, now)).fetchone()[0]
         results.append({**base, "msgid": int(msgid), "conversationid": conversation})
-    conn.commit()
-    return results
+    return results          # db() commit khi kết thúc giao dịch của yêu cầu
 
 
 @app.api_route("/webservice/rest/server.php", methods=["GET", "POST"])
@@ -213,20 +318,20 @@ async def rest(request: Request):
 @app.get("/stub/messages")
 def messages_json(userid: int, limit: int = 50):
     with db() as conn:
-        rows = conn.execute("""
-            SELECT m.id, m.useridfrom, uf.lastname || ' ' || uf.firstname, m.conversationid, m.fullmessage, m.timecreated
+        rows = conn.out.execute("""
+            SELECT m.id, m.useridfrom, m.conversationid, m.fullmessage, m.timecreated
             FROM mdl_messages m
             JOIN mdl_message_conversation_members cm ON cm.conversationid = m.conversationid AND cm.userid = %s
-            JOIN mdl_user uf ON uf.id = m.useridfrom
             ORDER BY m.timecreated DESC, m.id DESC LIMIT %s""", (userid, limit)).fetchall()
-    return [dict(msgid=r[0], useridfrom=r[1], from_name=r[2], conversationid=r[3], text=r[4], timecreated=r[5])
+        names = {uid: (display_name(conn, uid) or (f"#{uid}",))[0] for uid in {r[1] for r in rows}}
+    return [dict(msgid=r[0], useridfrom=r[1], from_name=names[r[1]], conversationid=r[2], text=r[3], timecreated=r[4])
             for r in rows]
 
 
 @app.get("/stub/inbox", response_class=HTMLResponse)
 def inbox(userid: int):
     with db() as conn:
-        user = conn.execute("SELECT lastname || ' ' || firstname, username FROM mdl_user WHERE id = %s", (userid,)).fetchone()
+        user = display_name(conn, userid)
     items = messages_json(userid)
     cards = "".join(
         f"<div class='m'><div class='h'><b>{html.escape(i['from_name'])}</b>"

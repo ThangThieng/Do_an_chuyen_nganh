@@ -64,7 +64,7 @@ function ContactTab({ courseId }) {
           { title: "MSSV", dataIndex: "student_code" },
           { title: "Họ tên", dataIndex: "student_name" },
           { title: "Lý do chính", dataIndex: "main_reason" },
-          { title: "Truy cập cuối", dataIndex: "days_since_last_access", render: fmtDaysSince },
+          { title: "Hoạt động cuối", dataIndex: "days_since_last_access", render: fmtDaysSince },
           { title: "Liên hệ gần nhất", dataIndex: "last_contact_at",
             render: (v, r) => (v ? `${fmtDateTime(v)} · ${r.last_contact_origin === "AUTO" ? "tự động" : r.last_contact_action === "EMAIL" ? "email" : r.last_contact_action === "MESSAGE" ? "Moodle" : "ghi nhận"}`
               : <span className="muted">chưa có</span>) },

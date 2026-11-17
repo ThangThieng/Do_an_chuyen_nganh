@@ -4,9 +4,8 @@
 
 .EXAMPLE
   .\scripts\lms.ps1 setup          # cài thư viện Python + npm, migrate 2 CSDL
-  .\scripts\lms.ps1 seed           # sinh cấu trúc Moodle giả lập
-  .\scripts\lms.ps1 mock           # sinh hành vi học tập tới LMS_AS_OF
-  .\scripts\lms.ps1 etl-backfill   # nạp lịch sử 3 bảng fact
+  .\scripts\lms.ps1 ingest         # nạp CSV Moodle thật ($env:REAL_DATA_DIR = thư mục chứa Data_11-2026\ và NEW\NEW\)
+  .\scripts\lms.ps1 etl-backfill   # tính lịch sử 3 bảng fact từ 13/09/2026
   .\scripts\lms.ps1 users          # tạo/cập nhật tài khoản (cần $env:BACKEND_SEED_PASSWORD)
   .\scripts\lms.ps1 api | web      # chạy API :8000 / frontend dev :5173
   .\scripts\lms.ps1 moodle-stub    # máy chủ Moodle 3.9 mô phỏng :8091 (kênh tin nhắn; hộp tin /stub/inbox)
@@ -14,12 +13,12 @@
   .\scripts\lms.ps1 messaging-check # in cấu hình kênh gửi tin (đã che bí mật), thử kết nối SMTP và Moodle
   .\scripts\lms.ps1 test           # pytest + vitest
   .\scripts\lms.ps1 e2e            # Playwright (cần API + web đang chạy, $env:LMS_DEMO_PASSWORD)
-  .\scripts\lms.ps1 bench          # hiệu năng: dựng x10, EXPLAIN x1/x10 (Locust, ETL: xem perf/README.md)
+  .\scripts\lms.ps1 bench          # hiệu năng: EXPLAIN các câu truy vấn của Dashboard (Locust: xem perf/README.md)
   .\scripts\lms.ps1 docker         # demo trọn gói bằng docker compose
 #>
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("setup", "seed", "mock", "etl-backfill", "users", "api", "web", "moodle-stub", "etl", "messaging-check",
+    [ValidateSet("setup", "ingest", "etl-backfill", "users", "api", "web", "moodle-stub", "etl", "messaging-check",
                  "test", "e2e", "bench", "docker")]
     [string]$Command
 )
@@ -41,9 +40,11 @@ switch ($Command) {
         Invoke-Step "Migrate CSDL phân tích" { python -m database.migrate up --target analytics }
         Invoke-Step "Migrate CSDL Moodle rút gọn" { python -m database.migrate up --target moodle }
     }
-    "seed" { Invoke-Step "Sinh cấu trúc Moodle" { python -m mockdata.seed_structure --reset } }
-    "mock" { Invoke-Step "Sinh hành vi học tập" { python -m mockdata.generate_activity --reset } }
-    "etl-backfill" { Invoke-Step "ETL backfill" { python -m etl.jobs.backfill --from 2026-09-07 } }
+    "ingest" {
+        if (-not $env:REAL_DATA_DIR) { throw "Đặt `$env:REAL_DATA_DIR = thư mục CSV Moodle thật (chứa Data_11-2026\ và NEW\NEW\)" }
+        Invoke-Step "Nạp CSV Moodle thật" { python -m ingest.run --data-dir $env:REAL_DATA_DIR --batch 2026-11 }
+    }
+    "etl-backfill" { Invoke-Step "ETL backfill" { python -m etl.jobs.backfill --from 2026-09-13 } }
     "users" { Invoke-Step "Đồng bộ tài khoản" { python -m backend.app.cli sync-users } }
     "api" { python -m uvicorn backend.app.main:app --port 8000 }
     "web" { Push-Location frontend; npm run dev; Pop-Location }
@@ -56,13 +57,11 @@ switch ($Command) {
     }
     "e2e" { Push-Location frontend; npx playwright test; Pop-Location }
     "bench" {
-        Invoke-Step "Dựng CSDL x10" { python -m perf.build_x10 }
-        Invoke-Step "EXPLAIN ANALYZE x1" { python -m perf.explain_queries --dataset x1 }
-        Invoke-Step "EXPLAIN ANALYZE x10" { python -m perf.explain_queries --dataset x10 }
+        Invoke-Step "EXPLAIN ANALYZE" { python -m perf.explain_queries --dataset x1 }
     }
     "docker" {
         if (-not (Test-Path docker\.env)) { throw "Chưa có docker/.env – sao chép từ docker/.env.example và điền giá trị" }
         Invoke-Step "docker compose up" { docker compose --env-file docker/.env up --build -d }
-        Write-Host "Mở http://localhost:8080 (lần đầu chờ dịch vụ init sinh dữ liệu: docker compose logs -f init)"
+        Write-Host "Mở http://localhost:8080 (lần đầu chờ dịch vụ init nạp dữ liệu thật: docker compose logs -f init)"
     }
 }

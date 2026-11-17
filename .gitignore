@@ -20,7 +20,6 @@ perf/.work/
 # Log & file sinh ra khi chạy
 logs/
 *.log
-mockdata/output/
 backups/
 
 # Cấu hình Claude Code cục bộ

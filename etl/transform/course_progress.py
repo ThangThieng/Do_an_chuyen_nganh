@@ -9,7 +9,7 @@ import pandas as pd
 from common.settings import TZ
 from etl.extract.course_data import CourseDataset
 from etl.transform.semester import academic_term
-from etl.transform.student_risk import percent
+from etl.transform.student_risk import effective_assignments, percent
 
 PROGRESS_KEYS = ("course_id", "stat_date")
 PROGRESS_JSON_COLUMNS = ("section_progress",)
@@ -33,12 +33,14 @@ def build_progress_rows(ds: CourseDataset, metrics: pd.DataFrame,
     rule_of = rule_of or {}
     stat_date = ds.as_of.date()
     submissions_day = dict(zip(ds.submissions_day["course_id"].astype(int), ds.submissions_day["submissions_day"]))
-    due = ds.assignments[ds.assignments["duedate"] < ds.as_of_ts]
+    asg = effective_assignments(ds)
+    due = asg[asg["duedate"] < ds.as_of_ts]
     due_assignments = due.groupby("course_id")["assign_id"].nunique().to_dict()
     sections = (ds.completion.groupby(["course_id", "section_no", "section_name"], as_index=False)
                 [["tracked_activities", "completed_activities"]].sum())
     metrics_by_course = {int(cid): group for cid, group in metrics.groupby("course_id")}
     sections_by_course = {int(cid): group for cid, group in sections.groupby("course_id")}
+    access_by_course = {int(cid): group for cid, group in ds.section_access.groupby("course_id")}
     empty_metrics = metrics.iloc[0:0]
 
     rows = []
@@ -52,6 +54,13 @@ def build_progress_rows(ds: CourseDataset, metrics: pd.DataFrame,
                  completion_rate=percent(s.completed_activities, s.tracked_activities))
             for s in sections_by_course.get(cid, sections.iloc[0:0]).sort_values("section_no").itertuples(index=False)
         ]
+        if not section_progress and cid in access_by_course and len(cm):
+            # Không có dữ liệu hoàn thành: % SV đã mở ít nhất một nội dung của chương (access_rate)
+            section_progress = [
+                dict(section=int(s.section_no), name=s.section_name,
+                     access_rate=percent(s.students_opened, len(cm)))
+                for s in access_by_course[cid].sort_values("section_no").itertuples(index=False)
+            ]
         rows.append(dict(
             stat_date=stat_date, course_id=cid,
             faculty_id=int(c.faculty_id), faculty_name=c.faculty_name,
@@ -61,7 +70,9 @@ def build_progress_rows(ds: CourseDataset, metrics: pd.DataFrame,
             total_enrolled_students=len(cm),
             active_students_day=int((cm["access_count_day"] > 0).sum()),
             active_students_7d=int((cm["access_count_7d"] > 0).sum()),
-            total_active_students=int((cm["term_access_count"] > 0).sum()),
+            # Có log từ ngày bắt đầu môn, hoặc không có log nào nhưng có bài nộp / bài kiểm tra (khớp IS_ACTIVE_IN_TERM)
+            total_active_students=int(((cm["term_access_count"] > 0)
+                                       | ((cm["total_access_count"] == 0) & cm["last_access_ts"].notna())).sum()),
             total_views_day=int(cm["views_day"].sum()),
             total_actions_day=int(cm["actions_day"].sum()),
             submissions_day=int(submissions_day.get(cid, 0)),

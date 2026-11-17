@@ -24,7 +24,10 @@ TEST_HOUR = datetime(2099, 1, 5, 9, 0)
 # ----------------------------------------------------------------------------- fixtures
 @pytest.fixture(scope="session")
 def connection():
-    cfg = load_db_config("ANALYTICS_DB")
+    cfg = load_db_config("ANALYTICS_DB")       # tests/conftest.py đã trỏ sang CSDL kiểm thử
+    with psycopg.connect(**cfg.conninfo(dbname=cfg.maintenance_db, application_name="lms-schema-tests")) as admin:
+        if admin.execute("SELECT 1 FROM pg_database WHERE datname = %s", (cfg.dbname,)).fetchone() is None:
+            pytest.skip(f"Chưa có CSDL kiểm thử {cfg.dbname} – chạy: python -m scripts.make_test_db")
     with psycopg.connect(**cfg.conninfo(application_name="lms-schema-tests")) as conn:
         yield conn
 

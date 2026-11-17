@@ -36,6 +36,18 @@ def week1_start(conn: Connection, academic_year: str, semester: int) -> date | N
     return value
 
 
+# Tiêu chí C2 nhìn lại 7 ngày nhật ký: trong tuần đầu tiên có nhật ký, gần như mọi SV đều "chưa từng truy cập"
+# -> mức Nguy cơ cao bị thổi phồng. Các ngày đó không vẽ lên đồ thị xu hướng (vẫn có trong bảng cảnh báo).
+LOG_WARMUP_DAYS = 7
+
+
+def log_warmup_end(conn: Connection) -> date | None:
+    """Ngày đầu tiên đủ 7 ngày nhật ký (ngày có nhật ký sớm nhất + 7). Không có nhật ký -> None."""
+    first = fetch_value(conn, """SELECT MIN(stat_hour)::date FROM analytics.fact_server_traffic_hourly
+                                 WHERE total_requests > 0""")
+    return first + timedelta(days=LOG_WARMUP_DAYS) if first is not None else None
+
+
 def course_start(conn: Connection, course_id: int, today: date) -> date | None:
     """Ngày bắt đầu môn theo dòng tiến độ mới nhất (dòng nạp trước V013 có thể chưa có giá trị)."""
     return fetch_value(conn, """SELECT course_start_date FROM analytics.fact_course_progress_daily
@@ -46,7 +58,7 @@ def course_start(conn: Connection, course_id: int, today: date) -> date | None:
 @cached
 def risk_trend(conn: Connection, academic_year: str, semester: int, today: date, granularity: str = "week",
                faculty_id: int | None = None, course_id: int | None = None,
-               teacher_id: int | None = None) -> dict:
+               teacher_id: int | None = None, category_id: int | None = None) -> dict:
     conditions = ["academic_year = :ay", "semester = :sem", "stat_date <= :today"]
     params: dict = {"ay": academic_year, "sem": semester, "today": today}
     if faculty_id is not None:
@@ -55,12 +67,23 @@ def risk_trend(conn: Connection, academic_year: str, semester: int, today: date,
     if course_id is not None:
         conditions.append("course_id = :course_id")
         params["course_id"] = course_id
+    if category_id is not None:
+        conditions.append("category_id = :category_id")
+        params["category_id"] = category_id
     if teacher_id is not None:
         conditions.append("teacher_ids @> ARRAY[CAST(:teacher_id AS integer)]")
         params["teacher_id"] = teacher_id
     week1 = ((course_start(conn, course_id, today) if course_id is not None else None)
              or week1_start(conn, academic_year, semester) or today)
     params["week1"] = week1
+    # Bỏ các ngày chưa đủ 7 ngày nhật ký (chỉ khi nhật ký bắt đầu muộn hơn ngày dữ liệu đầu tiên của phạm vi)
+    warmup_end = log_warmup_end(conn)
+    first_day = fetch_value(conn, f"SELECT MIN(stat_date) FROM analytics.fact_course_progress_daily WHERE {where(conditions)}",
+                            params)
+    hidden_before = warmup_end if warmup_end and first_day and first_day < warmup_end <= today else None
+    if hidden_before:
+        conditions = conditions + ["stat_date >= :hidden_before"]
+        params["hidden_before"] = hidden_before
     period = "stat_date" if granularity == "day" else "(stat_date - CAST(:week1 AS date)) / 7 + 1"
 
     rows = fetch_all(conn, f"""
@@ -112,4 +135,5 @@ def risk_trend(conn: Connection, academic_year: str, semester: int, today: date,
                          label=(f"{c['course_shortname']}: " if course_id is None else "")
                          + ("luật riêng " + c["label"] if c["scope"] == "COURSE" else "luật mặc định " + c["label"]))
                     for c in changes]
-    return dict(granularity=granularity, week1_start=week1, series=series, rule_changes=rule_changes)
+    return dict(granularity=granularity, week1_start=week1, series=series, rule_changes=rule_changes,
+                hidden_before=hidden_before)

@@ -11,12 +11,19 @@ SELECT cm.course                                               AS course_id,
        COUNT(cmc.id) FILTER (WHERE cmc.completionstate IN (1, 2)
                               AND cmc.timemodified <= :as_of)  AS completed_activities
 FROM mdl_course_modules cm
+JOIN mdl_course c            ON c.id = cm.course AND c.enablecompletion = 1
 JOIN mdl_course_sections cs  ON cs.id = cm.section
 JOIN student_enrol se        ON se.course_id = cm.course
 LEFT JOIN mdl_course_modules_completion cmc
                              ON cmc.coursemoduleid = cm.id AND cmc.userid = se.user_id
 WHERE cm.course = ANY(CAST(:course_ids AS bigint[]))
   AND cm.completion > 0
+  -- Môn chưa có bản ghi hoàn thành nào (trường không cung cấp bảng, hoặc tính năng chưa được dùng)
+  -- -> không trả dòng, tỷ lệ hoàn thành = NULL ("chưa có dữ liệu") thay vì 0%.
+  AND EXISTS (SELECT 1
+              FROM mdl_course_modules_completion x
+              JOIN mdl_course_modules xm ON xm.id = x.coursemoduleid
+              WHERE xm.course = cm.course)
   AND cm.visible = 1
   AND cm.deletioninprogress = 0
   AND cm.added <= :as_of

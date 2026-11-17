@@ -6,13 +6,16 @@ import { Alert, Card, Input, Table, Tag } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { errorText } from "../../api/client.js";
 import { useCatalog, useFilters } from "../../api/hooks.js";
-import TermFilterBar from "../../components/TermFilterBar.jsx";
+import TermFilterBar, { isSingleFaculty } from "../../components/TermFilterBar.jsx";
 import { fmtDate, fmtInt } from "../../utils/format.js";
 
 export default function AdminCatalog() {
   const { data: filters } = useFilters();
   const [term, setTerm] = useState(null);
   const [facultyId, setFacultyId] = useState();
+  const [departmentId, setDepartmentId] = useState();
+  const single = isSingleFaculty(filters);
+  const departmentName = (filters?.departments ?? []).find((d) => d.id === departmentId)?.name;
   const [search, setSearch] = useState("");
   useEffect(() => {
     if (filters && !term) setTerm(filters.current);
@@ -21,13 +24,15 @@ export default function AdminCatalog() {
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (catalog.data?.items ?? []).filter((c) => !q || [c.shortname, c.fullname, ...c.teachers.map((t) => t.full_name)]
-      .some((v) => v?.toLowerCase().includes(q)));
-  }, [catalog.data, search]);
+    return (catalog.data?.items ?? [])
+      .filter((c) => !departmentName || c.category_name === departmentName)
+      .filter((c) => !q || [c.shortname, c.fullname, ...c.teachers.map((t) => t.full_name)]
+        .some((v) => v?.toLowerCase().includes(q)));
+  }, [catalog.data, search, departmentName]);
 
   const columns = [
-    { title: "Khoa", dataIndex: "faculty_name" },
-    { title: "Bộ môn", dataIndex: "category_name" },
+    ...(single ? [] : [{ title: "Khoa", dataIndex: "faculty_name" }]),     // một khoa: cột lặp cùng một tên – ẩn
+    { title: "Bộ môn / Chuyên ngành", dataIndex: "category_name" },
     { title: "Mã môn", dataIndex: "shortname", sorter: (a, b) => a.shortname.localeCompare(b.shortname) },
     { title: "Tên môn học", dataIndex: "fullname" },
     {
@@ -54,11 +59,12 @@ export default function AdminCatalog() {
     <>
       <div className="filter-bar">
         <b>Danh mục môn học</b>
-        <TermFilterBar filters={filters} term={term} onTermChange={setTerm} facultyId={facultyId} onFacultyChange={setFacultyId} />
+        <TermFilterBar filters={filters} term={term} onTermChange={setTerm} facultyId={facultyId} onFacultyChange={setFacultyId}
+          departmentId={departmentId} onDepartmentChange={setDepartmentId} />
         <Input.Search allowClear placeholder="Tìm mã môn, tên môn, giảng viên" style={{ width: 300 }}
           value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm môn học" />
       </div>
-      <Card title="Môn học và giảng viên phụ trách"
+      <Card title={single && filters ? `Môn học và giảng viên phụ trách – ${filters.faculties[0].name}` : "Môn học và giảng viên phụ trách"}
         extra={catalog.data && <span className="muted">{fmtInt(rows.length)} môn</span>}>
         {catalog.error && <Alert type="error" showIcon message={errorText(catalog.error)} style={{ marginBottom: 12 }} />}
         <Table rowKey="course_id" size="small" loading={catalog.isLoading} columns={columns} dataSource={rows}

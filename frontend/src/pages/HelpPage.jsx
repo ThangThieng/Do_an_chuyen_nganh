@@ -20,6 +20,10 @@ const ADMIN_GUIDE = [
         <li>Trang Tổng quan là bức tranh toàn trường: thẻ KPI, biểu đồ tròn và đồ thị xu hướng mức rủi ro, so sánh giữa các khoa
           (quy mô, tỷ lệ tương tác, phân bố rủi ro) kèm bảng tóm tắt, và lưu lượng hệ thống.</li>
         <li>Nhấn vào cột hoặc dòng của một khoa để mở <b>trang Khoa</b>: so sánh các môn trong khoa và bảng môn học.</li>
+        <li>Khi dữ liệu chỉ có <b>một khoa</b> (như dữ liệu Khoa CNTT hiện tại), khối so sánh tự chuyển sang so sánh các
+          <b> bộ môn / chuyên ngành</b> của khoa đó, các đường trung bình ghi "toàn khoa", và ô chọn khoa trên thanh lọc được thay
+          bằng ô chọn bộ môn. Nhấn một bộ môn để mở trang Khoa đã lọc sẵn bộ môn đó: số liệu đầu trang, biểu đồ tròn, xu hướng
+          và đường trung bình khi ấy chỉ tính các môn của bộ môn.</li>
         <li>Nhấn vào một môn để mở <b>trang Môn học</b>: biểu đồ rủi ro của lớp, bảng cảnh báo, danh sách sinh viên; nhấn một sinh viên để xem chi tiết.</li>
         <li>Thanh cấp xem (Toàn trường › Khoa › Môn học) ở đầu trang cho biết đang ở cấp nào; nút Back của trình duyệt và F5 giữ đúng cấp và học kỳ.</li>
         <li>Liên kết <b>Nguồn &amp; cách tính</b> trên mỗi biểu đồ cho biết số liệu lấy từ bảng Moodle nào và tính như thế nào.</li>
@@ -30,9 +34,10 @@ const ADMIN_GUIDE = [
     key: "traffic", label: "Lưu lượng – theo dõi tải hệ thống",
     children: (
       <p>
-        Chọn khoảng ngày để xem số lượt truy cập và số người online theo giờ trên biểu đồ hai trục. Thẻ <b>Online hiện tại</b> tự làm mới
-        mỗi 60 giây; heatmap giờ × thứ cho thấy khung giờ đông nhất trong 1–12 tuần gần nhất. Số “lượt truy cập” được đếm từ nhật ký sự kiện
-        của Moodle nên là chỉ số gần đúng của tải, không phải số HTTP request.
+        Chọn khoảng ngày để xem số lượt hoạt động và số người online theo giờ trên biểu đồ hai trục. Thẻ <b>Online hiện tại</b> tự làm mới
+        mỗi 60 giây. Biểu đồ <b>Giờ đông / giờ vắng</b> tô màu theo số người online trung bình của từng giờ trong tuần (màu càng
+        đậm càng đông) trong 1–12 tuần gần nhất, kèm dòng tóm tắt giờ đông nhất và khung giờ vắng nhất. Số liệu ước tính từ nhật ký
+        hoạt động trong các môn học của Moodle.
       </p>
     ),
   },
@@ -72,6 +77,8 @@ const TEACHER_GUIDE = [
         <li>Bảng sắp xếp sẵn Đỏ → Vàng → Xanh, trong cùng mức thì điểm rủi ro cao đứng trước. Có thể lọc theo từng tiêu chí và xuất danh sách ra Excel/PDF.</li>
         <li>Đồ thị xu hướng cạnh biểu đồ tròn cho biết lớp đang tốt lên hay xấu đi theo từng tuần.</li>
         <li>Nhấn một dòng để xem lý do cảnh báo, bảng phân tích điểm rủi ro, so sánh với lớp, hoạt động theo tuần và bài tập.</li>
+        <li>MSSV lấy từ mã số sinh viên trong Moodle; nếu Moodle để trống thì hệ thống suy từ tên đăng nhập (cụm 7 chữ số), nên có thể thiếu ở một vài sinh viên.</li>
+        <li>Môn không có dữ liệu điểm danh hoặc chưa có bài tới hạn: tiêu chí đó ghi “không áp dụng” và không tính vào điểm rủi ro; khi chỉ còn 2 tiêu chí, ngưỡng “tổng điểm” để xếp Nguy cơ cao hạ từ 4 xuống 3.</li>
         <li>Nút <b>Gửi tin nhắn Moodle</b> / <b>Gửi email</b> mở trình soạn tin có sẵn số liệu của sinh viên; <b>Ghi chú</b>, <b>Hẹn gặp</b> ghi vào nhật ký can thiệp.</li>
       </ol>
     ),
@@ -161,7 +168,8 @@ export default function HelpPage() {
               Nguyễn Thăng Thiêng (2312755)<br />Nguyễn Ngọc Bảo Thịnh (2312757)<br />Chung Thiện Ý (2312804)
             </Descriptions.Item>
             <Descriptions.Item label="Nguồn dữ liệu">
-              CSDL Moodle (lược đồ Moodle 3.9){filters?.as_of && " – dữ liệu mô phỏng 5 khoa"}. Các bảng được đọc:{" "}
+              Dữ liệu Moodle 3.11 thật của Khoa Công nghệ Thông tin do khoa cung cấp (xuất ngày 12/11/2026), nạp vào CSDL
+              theo lược đồ Moodle. Các bảng được đọc:{" "}
               <span className="small">{tables.join(", ") || "…"}</span>
             </Descriptions.Item>
             <Descriptions.Item label="Thời điểm tham chiếu">{filters ? fmtDateTime(filters.as_of) : "–"}</Descriptions.Item>

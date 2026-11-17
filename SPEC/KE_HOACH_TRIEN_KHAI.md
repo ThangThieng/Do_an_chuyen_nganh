@@ -5,6 +5,7 @@
 > Tài liệu gốc: `SPEC/yeu_cau_xay_dung_web_truc_quan_hoa_lms.pdf`
 > Phiên bản: 1.0 – 14/09/2026
 > Nguồn schema: Moodle 3.9 – https://moodleschema.zoola.io/
+> Ghi chú 16/11/2026: tài liệu này là kế hoạch gốc v1.0 và được giữ nguyên. Từ 16/11/2026 hệ thống chạy thêm trên dữ liệu Moodle 3.11 thật của trường; các điểm khác với kế hoạch (C1 từ sổ điểm, hạn hiệu lực của bài tập, phạm vi môn theo học kỳ, tỷ lệ hoàn thành NULL, gói nạp CSV) ghi tại [BAO_CAO_TIEN_DO.md](BAO_CAO_TIEN_DO.md) mục 2.12 và 3.9.
 
 ---
 

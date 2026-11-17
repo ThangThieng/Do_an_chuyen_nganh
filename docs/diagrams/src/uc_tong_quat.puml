@@ -6,6 +6,7 @@ actor "Quản trị viên" as QT
 actor "Giảng viên" as GV
 actor "Bộ lập lịch ETL\n(tác nhân thời gian)" as LL
 actor "Moodle LMS\n(hệ thống ngoài)" as MD
+actor "Máy chủ thư\n(hệ thống ngoài)" as SMTP
 QT -up-|> ND
 GV -up-|> ND
 
@@ -14,9 +15,10 @@ rectangle "Hệ thống LMS Analytics" {
     usecase "UC01 Đăng nhập" as UC01
     usecase "UC02 Đổi mật khẩu" as UC02
     usecase "UC03 Xem hướng dẫn sử dụng" as UC03
+    usecase "UC24 Xem nguồn và cách tính\ncủa chỉ số" as UC24
   }
   package "Phân hệ Quản trị" {
-    usecase "UC04 Thống kê phân cấp\nKhoa – Môn – Sinh viên" as UC04
+    usecase "UC04 Thống kê phân cấp Toàn trường –\nKhoa – Môn – Sinh viên" as UC04
     usecase "UC05 Theo dõi lưu lượng truy cập" as UC05
     usecase "UC06 Xuất báo cáo Excel/PDF" as UC06
     usecase "UC07 Tra cứu danh mục môn học" as UC07
@@ -24,6 +26,7 @@ rectangle "Hệ thống LMS Analytics" {
     usecase "UC09 Xem nhật ký ETL" as UC09
     usecase "UC10 Sao lưu dữ liệu" as UC10
     usecase "UC11 Phục hồi dữ liệu" as UC11
+    usecase "UC22 Kiểm tra kênh gửi tin" as UC22
   }
   package "Phân hệ Giảng viên" {
     usecase "UC12 Xem cảnh báo sinh viên nguy cơ" as UC12
@@ -31,14 +34,20 @@ rectangle "Hệ thống LMS Analytics" {
     usecase "UC14 Ghi nhận can thiệp" as UC14
     usecase "UC15 Xuất danh sách cảnh báo" as UC15
     usecase "UC16 Xem tiến độ lớp" as UC16
+    usecase "UC18 Thiết lập luật cảnh báo\nriêng cho môn" as UC18
+    usecase "UC19 Soạn và gửi tin nhắn\ncho sinh viên" as UC19
+    usecase "UC20 Quản lý mẫu tin nhắn" as UC20
+    usecase "UC21 Thiết lập nhắc tự động" as UC21
   }
   package "Tiến trình nền" {
     usecase "UC17 Đồng bộ và tổng hợp\ndữ liệu từ Moodle (ETL)" as UC17
+    usecase "UC23 Tạo tin nhắc tự động và\ngửi hàng đợi tin nhắn" as UC23
   }
 }
 ND --> UC01
 ND --> UC02
 ND --> UC03
+ND --> UC24
 QT --> UC04
 QT --> UC05
 QT --> UC06
@@ -47,11 +56,21 @@ QT --> UC08
 QT --> UC09
 QT --> UC10
 QT --> UC11
-GV --> UC12
-GV --> UC13
-GV --> UC14
-GV --> UC15
-GV --> UC16
+QT --> UC22
+UC12 <-- GV
+UC13 <-- GV
+UC14 <-- GV
+UC15 <-- GV
+UC16 <-- GV
+UC18 <-- GV
+UC19 <-- GV
+UC20 <-- GV
+UC21 <-- GV
 LL --> UC17
 UC17 --> MD
+' đặt phân hệ Giảng viên cạnh phân hệ Quản trị (giảng viên ở bên phải)
+UC04 -[hidden]-> UC12
+LL --> UC23
+UC23 --> MD
+UC23 --> SMTP
 @enduml

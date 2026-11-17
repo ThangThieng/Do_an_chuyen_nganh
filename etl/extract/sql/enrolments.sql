@@ -2,7 +2,8 @@
 WITH student_enrol AS ({{student_enrol}})
 SELECT se.course_id,
        se.user_id,
-       NULLIF(u.idnumber, '') AS student_code,
+       -- MSSV: idnumber; nếu trường không dùng idnumber thì lấy cụm 7 chữ số trong username
+       COALESCE(NULLIF(u.idnumber, ''), substring(u.username from '(?<![0-9])[0-9]{7}(?![0-9])')) AS student_code,
        u.lastname,
        u.firstname,
        NULLIF(u.email, '')    AS email

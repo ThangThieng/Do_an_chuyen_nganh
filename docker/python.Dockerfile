@@ -1,4 +1,4 @@
-# Image Python dùng chung cho init (migrate + mock + backfill + tài khoản), etl (scheduler) và backend (FastAPI)
+# Image Python dùng chung cho init (migrate + nạp CSV thật + backfill + tài khoản), etl (scheduler) và backend (FastAPI)
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -17,17 +17,17 @@ RUN pip install -r requirements.txt
 
 COPY common ./common
 COPY database ./database
-COPY mockdata ./mockdata
+COPY ingest ./ingest
 COPY etl ./etl
 COPY backend ./backend
 COPY tools ./tools
 COPY docker/bootstrap.sh ./docker/bootstrap.sh
 
-# Chạy bằng user thường; thư mục ground truth của mock data và thư mục sao lưu cần quyền ghi
+# Chạy bằng user thường; thư mục sao lưu cần quyền ghi
 RUN sed -i 's/\r$//' docker/bootstrap.sh \
     && useradd --create-home --uid 10001 app \
-    && mkdir -p mockdata/output backups \
-    && chown -R app:app mockdata/output backups
+    && mkdir -p backups \
+    && chown -R app:app backups
 USER app
 
 CMD ["python", "-m", "uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

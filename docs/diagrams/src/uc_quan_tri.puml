@@ -3,9 +3,10 @@
 left to right direction
 actor "Quản trị viên" as QT
 rectangle "Phân hệ Quản trị" {
-  usecase "UC04 Thống kê phân cấp\nKhoa – Môn – Sinh viên" as UC04
-  usecase "Xem danh sách môn của khoa" as UC04a
-  usecase "Xem danh sách sinh viên của môn" as UC04b
+  usecase "UC04 Thống kê phân cấp Toàn trường –\nKhoa – Môn – Sinh viên" as UC04
+  usecase "Xem trang Khoa\n(so sánh các môn của khoa)" as UC04a
+  usecase "Xem trang Môn học\n(cảnh báo, sinh viên của môn)" as UC04b
+  usecase "Xem chi tiết sinh viên\n(chỉ xem)" as UC04c
   usecase "UC05 Theo dõi lưu lượng truy cập" as UC05
   usecase "UC06 Xuất báo cáo Excel/PDF" as UC06
   usecase "Xem trước dữ liệu báo cáo" as UC06a
@@ -17,6 +18,8 @@ rectangle "Phân hệ Quản trị" {
   usecase "UC10 Sao lưu dữ liệu" as UC10
   usecase "UC11 Phục hồi dữ liệu" as UC11
   usecase "Xác nhận tên bản sao lưu" as UC11a
+  usecase "UC22 Kiểm tra kênh gửi tin" as UC22
+  usecase "Gửi email thử" as UC22a
   usecase "UC01 Đăng nhập" as UC01
 }
 QT --> UC04
@@ -27,8 +30,11 @@ QT --> UC08
 QT --> UC09
 QT --> UC10
 QT --> UC11
+QT --> UC22
 UC04a .> UC04 : <<extend>>
 UC04b .> UC04a : <<extend>>
+UC04c .> UC04b : <<extend>>
+UC22a .> UC22 : <<extend>>
 UC06a .> UC06 : <<extend>>
 UC08a .> UC08 : <<extend>>
 UC08b .> UC08 : <<extend>>
@@ -41,4 +47,5 @@ UC08 ..> UC01 : <<include>>
 UC09 ..> UC01 : <<include>>
 UC10 ..> UC01 : <<include>>
 UC11 ..> UC01 : <<include>>
+UC22 ..> UC01 : <<include>>
 @enduml

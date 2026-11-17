@@ -684,7 +684,7 @@ Tóm tắt:
 
 | Nhóm | Số lượng | Kết quả |
 |---|---|---|
-| pytest (CSDL, ETL, mock data, tích hợp, API, gửi tin, bảo mật, sao lưu) | 355 | Tất cả đạt |
+| pytest (CSDL, ETL, mock data, tích hợp, API, gửi tin, bảo mật, sao lưu) | 354 | Tất cả đạt |
 | vitest (hàm định dạng, gộp dữ liệu biểu đồ, nhãn trục) | 10 | Tất cả đạt |
 | Playwright E2E (luồng Admin/GV, luật theo môn, gửi tin, phân quyền, responsive 4 kích thước × 7 trang, WCAG) | 57 | Tất cả đạt |
 
@@ -694,13 +694,13 @@ Hiệu năng trên dữ liệu 5 khoa (máy Intel i5-12450H, 16 GB RAM, PostgreS
 |---|---|---|
 | 94 câu SQL của Dashboard, gồm mọi API v1.2 (770.314 dòng cảnh báo) | ≤ 100 ms, không Seq Scan bảng lớn | chậm nhất **8,9 ms**, không Seq Scan |
 | API với 50 người dùng đồng thời (5 phút, gồm API v1.2) | p95 < 500 ms, p99 < 1 s, lỗi < 0,1% | p95 **28 ms**, p99 **50 ms**, **0 lỗi** trong 8.832 request |
-| Gửi 200 tin (100 SV × 2 kênh, file .eml + Moodle mô phỏng) | < 30 giây | Đạt (kiểm thử tự động) |
+| Gửi 200 tin (100 SV × 2 kênh, file .eml + Moodle mô phỏng) | < 30 giây | **2,6 giây** (kiểm thử tự động) |
 | ETL backfill 61 ngày | – | **31,4 phút** (45,4 triệu dòng trích xuất) |
 | Sinh dữ liệu mô phỏng 5 khoa | – | **6,9 phút** |
 
 Số đo dữ liệu 1 khoa / x10 của phiên bản 1.0 (và chi tiết từng phép đo): [KET_QUA_KIEM_THU.md](KET_QUA_KIEM_THU.md).
 
-Trong quá trình đo tải đã phát hiện và sửa hai lỗi hiệu năng thật. Ở v1.2: phép đếm "sinh viên duy nhất" quét toàn bảng cảnh báo (700 ms, tới 2–3 giây khi đồng thời) – viết lại để tra theo chỉ mục và thêm chỉ mục phủ (migration V014), còn 7 ms. Ở v1.0: uvicorn mặc định đóng kết nối nhàn rỗi sau 5 giây, trùng với khoảng nghỉ 2–5 giây của người dùng, khiến vài request lẻ phải chờ TCP hết giờ tới 30–69 giây (trong khi PostgreSQL không có truy vấn nào quá 1 giây). Đặt `--timeout-keep-alive 65` thì request chậm nhất còn 0,55 giây; thiết lập này đã đưa vào `docker-compose.yml`.
+Trong quá trình đo đã phát hiện và sửa ba lỗi hiệu năng thật. Ở v1.2: gửi tin nhắn Moodle tạo kết nối HTTP mới cho mỗi tin (~0,4 s/tin trên Windows) – nay một lượt gửi dùng chung một kết nối, gửi 200 tin từ 48 s còn 2,6 s; phép đếm "sinh viên duy nhất" quét toàn bảng cảnh báo (700 ms, tới 2–3 giây khi đồng thời) – viết lại để tra theo chỉ mục và thêm chỉ mục phủ (migration V014), còn 7 ms. Ở v1.0: uvicorn mặc định đóng kết nối nhàn rỗi sau 5 giây, trùng với khoảng nghỉ 2–5 giây của người dùng, khiến vài request lẻ phải chờ TCP hết giờ tới 30–69 giây (trong khi PostgreSQL không có truy vấn nào quá 1 giây). Đặt `--timeout-keep-alive 65` thì request chậm nhất còn 0,55 giây; thiết lập này đã đưa vào `docker-compose.yml`.
 
 ---
 
@@ -709,7 +709,7 @@ Trong quá trình đo tải đã phát hiện và sửa hai lỗi hiệu năng t
 **Hạn chế cần nêu rõ khi báo cáo:**
 
 1. `mdl_logstore_standard_log` ghi **sự kiện nghiệp vụ**, không phải HTTP request. Con số "requests" là chỉ số gần đúng của tải hệ thống. Muốn số thật phải đọc access log của Nginx/Apache.
-2. Dữ liệu hiện tại là **giả lập** cho 5 khoa (58 môn, 3.000 sinh viên) theo đúng lược đồ Moodle 3.9, không phải dữ liệu thật của trường. Khi có dữ liệu thật chỉ cần trỏ `MOODLE_DB_*` sang bản sao CSDL Moodle của trường, để trống `LMS_AS_OF` và chạy backfill – không phải sửa mã (kế hoạch v1.2, chương 8).
+2. Dữ liệu mô phỏng cho 5 khoa (58 môn, 3.000 sinh viên) theo lược đồ Moodle 3.9 vẫn được giữ; từ 16/11/2026 hệ thống chạy thêm trên bản xuất CSV Moodle 3.11 của Khoa CNTT (`moodle_src_real`, `lms_analytics_real`, chuyển bằng 3 dòng `.env`). Nhà trường không cung cấp được bảng điểm danh của plugin, hoàn thành hoạt động, hạn nộp riêng và sự kiện đăng nhập – thiếu vĩnh viễn: chuyên cần lấy từ sổ điểm, tỷ lệ hoàn thành hiện "Chưa có dữ liệu", số lượt đăng nhập = 0. Chi tiết: `docs/du_lieu_that/KE_HOACH_CHUYEN_DOI_DU_LIEU_THAT.md`.
 3. Gửi tin nhắn Moodle và email đã chạy thật qua Moodle Web Service và SMTP, nhưng mới chứng minh với máy chủ Moodle mô phỏng và máy chủ SMTP cục bộ; gửi tới Moodle/SMTP thật của trường cần token và tài khoản thư do nhà trường cấp.
 4. Bộ đếm chặn đăng nhập sai nằm trong bộ nhớ một tiến trình; khi chạy nhiều worker cần chuyển sang Redis hoặc bảng CSDL.
 5. Màu đèn giao thông theo đề tài không phân biệt được với người mù màu đỏ–lục; hệ thống bù bằng biểu tượng và chữ ở mọi chỗ.

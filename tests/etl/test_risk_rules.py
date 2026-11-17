@@ -72,7 +72,7 @@ def test_inactivity_criterion(days, access_14d, median, expected):
 
 def test_inactivity_reasons():
     assert score_student(student(days_since_last_access=None, access_count_14d=0), MEDIAN)["risk_reasons"] == \
-        ["Chưa từng truy cập môn học"]
+        ["Không có hoạt động nào được ghi nhận trong môn"]
     assert score_student(student(days_since_last_access=16), MEDIAN)["risk_reasons"] == ["16 ngày chưa truy cập"]
     assert score_student(student(days_since_last_access=2, access_count_14d=1), MEDIAN)["risk_reasons"] == \
         ["Tương tác thấp hơn 50% trung vị lớp"]
@@ -161,3 +161,60 @@ def test_invalid_input_raises(overrides):
 def test_negative_median_raises():
     with pytest.raises(ValueError):
         score_student(student(), -1)
+
+
+# ---------------------------------------------------------------- tiêu chí không có dữ liệu không tính vào điểm
+def test_full_data_keeps_original_formula():
+    r = score_student(student(absent_sessions=3, days_since_last_access=10, missing_assignments_count=0), 20)
+    assert (r["score_attendance"], r["score_inactivity"], r["score_assignment"]) == (2, 1, 0)
+    assert r["risk_score"] == 50                       # 100 × (0,35·2 + 0,30·1 + 0) ÷ 2 = 50
+
+
+def test_no_attendance_data_reweights_remaining_criteria():
+    r = score_student(student(total_sessions=0, absent_sessions=0, days_since_last_access=None,
+                              total_assignments=10, missing_assignments_count=3), 20)
+    assert (r["score_attendance"], r["score_inactivity"], r["score_assignment"]) == (0, 2, 1)
+    # 100 × (0,30·2 + 0,35·1) ÷ (2 × 0,65) = 73,08 -> 73 (công thức cũ cho 48)
+    assert r["risk_score"] == 73 and r["attendance_status"] == "NO_DATA" and r["risk_level"] == "RED"
+
+
+def test_no_due_assignment_reweights_remaining_criteria():
+    r = score_student(student(absent_sessions=3, days_since_last_access=1, total_assignments=0,
+                              missing_assignments_count=0), 20)
+    assert (r["score_attendance"], r["score_inactivity"], r["score_assignment"]) == (2, 0, 0)
+    assert r["risk_score"] == 54                       # 100 × 0,35·2 ÷ (2 × 0,65) = 53,8 -> 54
+
+
+def test_only_inactivity_applies_when_no_attendance_and_no_due_assignment():
+    r = score_student(student(total_sessions=0, absent_sessions=0, days_since_last_access=None,
+                              total_assignments=0, missing_assignments_count=0), 20)
+    assert r["risk_score"] == 100 and r["risk_level"] == "RED"
+
+
+# ---------------------------------------------------------------- ngưỡng "tổng điểm" co theo số tiêu chí có dữ liệu
+def test_two_criteria_total_three_is_red():
+    # Môn không có điểm danh: C2 = 1, C3 = 2 -> tổng 3 >= ngưỡng 3 của 2 tiêu chí -> Nguy cơ cao
+    r = score_student(student(total_sessions=0, absent_sessions=0, days_since_last_access=10,
+                              total_assignments=10, missing_assignments_count=7), 20)
+    assert (r["score_inactivity"], r["score_assignment"]) == (1, 2) and r["risk_level"] == "RED"
+
+
+def test_three_criteria_total_three_stays_yellow():
+    # Đủ 3 tiêu chí: C1 = 1, C2 = 1, C3 = 1 -> tổng 3 < 4 -> Cần lưu ý (luật cũ giữ nguyên)
+    r = score_student(student(absent_sessions=2, days_since_last_access=10, total_assignments=10,
+                              missing_assignments_count=3), 20)
+    assert (r["score_attendance"], r["score_inactivity"], r["score_assignment"]) == (1, 1, 1)
+    assert r["risk_level"] == "YELLOW"
+
+
+def test_red_total_threshold_scales():
+    from etl.transform.risk_rules import red_total_threshold
+    assert [red_total_threshold(4, n) for n in (3, 2, 1)] == [4, 3, 2]
+
+
+def test_no_activity_reason_names_log_start():
+    """Nhật ký chỉ có từ một ngày: lý do nói rõ từ ngày nào, không khẳng định "chưa từng truy cập"."""
+    from etl.transform.risk_rules import no_activity_reason
+    assert no_activity_reason({"log_start": "13/09/2026"}) == \
+        "Không có hoạt động nào trong môn từ 13/09/2026 (ngày đầu của nhật ký)"
+    assert no_activity_reason({}) == "Không có hoạt động nào được ghi nhận trong môn"

@@ -98,7 +98,7 @@ def test_order_by_only_accepts_whitelisted_sorts():
     (Decimal("41.666"), "percent", "41,67"),
     (None, "percent", "–"),                     # chưa có dữ liệu, khác 0%
     (0, "percent", "0,00"),
-    (None, "days", "Chưa truy cập"),
+    (None, "days", "Chưa có hoạt động"),
     (12, "days", "12"),
     ("RED", "risk_level", "Nguy cơ cao"),
     (["Vắng 5/12 buổi (42%)", "Thiếu 4/5 bài tập"], "list", "Vắng 5/12 buổi (42%); Thiếu 4/5 bài tập"),
@@ -115,4 +115,4 @@ def test_excel_value_keeps_native_types():
     assert excel_value(Decimal("88.10"), "percent") == pytest.approx(88.1)
     assert excel_value(datetime(2026, 11, 6, 2, 0, tzinfo=timezone.utc), "datetime") == datetime(2026, 11, 6, 9, 0)
     assert excel_value("GREEN", "risk_level") == "An toàn"
-    assert excel_value(None, "days") == "Chưa truy cập"
+    assert excel_value(None, "days") == "Chưa có hoạt động"

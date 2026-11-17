@@ -11,7 +11,8 @@ from dataclasses import asdict, dataclass
 
 ENROL_TABLES = ("mdl_user_enrolments", "mdl_enrol", "mdl_role_assignments", "mdl_role", "mdl_context", "mdl_user")
 ATTENDANCE_TABLES = ("mdl_attendance", "mdl_attendance_sessions", "mdl_attendance_log", "mdl_attendance_statuses")
-ASSIGN_TABLES = ("mdl_assign", "mdl_assign_submission", "mdl_groups_members", "mdl_course_modules")
+ASSIGN_TABLES = ("mdl_assign", "mdl_assign_submission", "mdl_groups_members", "mdl_course_modules", "mdl_quiz",
+                 "mdl_quiz_attempts")
 
 ETL_JOBS = {
     "student_risk": "07:15–21:15, 2 giờ/lần; chốt ngày lúc 01:00",
@@ -65,21 +66,27 @@ METRICS: tuple[Metric, ...] = (
            "điểm 0–2", ATTENDANCE_TABLES, "fact_student_risk_summary", "student_risk"),
     Metric("c2_inactivity", "C2 – Không tương tác",
            "Mức không tương tác với môn học trên Moodle",
-           "2 điểm: chưa từng vào hoặc quá ngưỡng ngày (mức cao); 1 điểm: quá ngưỡng ngày (mức thấp) hoặc lượt truy cập "
+           "Số ngày tính từ hoạt động cuối = lần muộn nhất trong nhật ký, lần nộp bài và lần làm bài kiểm tra. "
+           "2 điểm: không có hoạt động nào hoặc quá ngưỡng ngày (mức cao); 1 điểm: quá ngưỡng ngày (mức thấp) hoặc lượt truy cập "
            "14 ngày dưới tỷ lệ so với trung vị lớp; còn lại 0 điểm",
-           "điểm 0–2", ("mdl_logstore_standard_log",), "fact_student_risk_summary", "student_risk"),
+           "điểm 0–2", ("mdl_logstore_standard_log", "mdl_assign_submission", "mdl_quiz_attempts"),
+           "fact_student_risk_summary", "student_risk"),
     Metric("c3_assignment", "C3 – Thiếu bài tập",
            "Mức thiếu bài tập đã tới hạn",
-           "Tỷ lệ thiếu = bài thiếu ÷ bài đã tới hạn; so với hai ngưỡng của luật đang áp dụng → 0, 1 hoặc 2 điểm",
+           "Tỷ lệ thiếu = bài thiếu ÷ bài đã tới hạn; so với hai ngưỡng của luật đang áp dụng → 0, 1 hoặc 2 điểm. "
+           "Bài / bài kiểm tra chỉ giao cho một nhóm thì chỉ tính cho SV trong nhóm; mục đã tới hạn mà cả lớp không ai "
+           "nộp (vd tài liệu đăng bằng hoạt động Bài tập) không tính",
            "điểm 0–2", ASSIGN_TABLES, "fact_student_risk_summary", "student_risk"),
     Metric("risk_score", "Điểm rủi ro",
            "Điểm tổng hợp 0–100 từ 3 tiêu chí theo trọng số của luật đang áp dụng",
-           "round(100 × (wC1·C1 + wC2·C2 + wC3·C3) ÷ 2)",
+           "round(100 × (wC1·C1 + wC2·C2 + wC3·C3) ÷ 2); tiêu chí không có dữ liệu (môn không có điểm danh, chưa có "
+           "bài tới hạn) không tính, trọng số chia lại cho các tiêu chí còn lại",
            "điểm 0–100", ATTENDANCE_TABLES + ("mdl_logstore_standard_log",) + ASSIGN_TABLES,
            "fact_student_risk_summary", "student_risk"),
     Metric("risk_level", "Mức rủi ro",
            "Đèn giao thông: Nguy cơ cao / Cần lưu ý / An toàn",
-           "Nguy cơ cao khi C2 = 2, hoặc ≥ 2 tiêu chí đạt 2 điểm, hoặc tổng điểm ≥ 4, hoặc khớp luật bổ sung mức đỏ "
+           "Nguy cơ cao khi C2 = 2, hoặc ≥ 2 tiêu chí đạt 2 điểm, hoặc tổng điểm ≥ 4 (chỉ 2 tiêu chí có dữ liệu: ≥ 3), "
+           "hoặc khớp luật bổ sung mức đỏ "
            "của môn; Cần lưu ý khi tổng ≥ 1 hoặc khớp luật bổ sung mức vàng; còn lại An toàn",
            "mức", ATTENDANCE_TABLES + ("mdl_logstore_standard_log",) + ASSIGN_TABLES,
            "fact_student_risk_summary", "student_risk"),
@@ -92,8 +99,10 @@ METRICS: tuple[Metric, ...] = (
            "Xếp các bài đã tới hạn theo hạn nộp, đếm chuỗi “thiếu” dài nhất",
            "bài", ASSIGN_TABLES, "fact_student_risk_summary", "student_risk"),
     Metric("traffic", "Lưu lượng truy cập",
-           "Số sự kiện (requests) theo giờ và người dùng online",
-           "Đếm sự kiện logstore theo giờ địa phương; online = phiên có hoạt động trong 5 phút; giờ cao điểm vượt P90 28 ngày",
+           "Lượt hoạt động (sự kiện trong nhật ký) theo giờ và số người dùng online",
+           "Đếm sự kiện logstore theo giờ địa phương (tính tới mốc dữ liệu); online = người có hoạt động trong khung 5 phút "
+           "(từ phiên đăng nhập nếu có, không thì ước tính từ nhật ký); giờ cao điểm vượt P90 28 ngày. Nhật ký hiện có chỉ "
+           "gồm hoạt động trong các môn (không có đăng nhập, trang chủ, ứng dụng điện thoại) nên thấp hơn tải thật của hệ thống",
            "sự kiện/giờ", ("mdl_logstore_standard_log", "mdl_sessions"), "fact_server_traffic_hourly", "traffic"),
 )
 BY_KEY = {m.key: m for m in METRICS}

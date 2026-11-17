@@ -41,7 +41,7 @@ export function fmtHour(value) {
 }
 
 export function fmtDaysSince(days) {
-  if (days == null) return "Chưa truy cập";
+  if (days == null) return "Chưa có hoạt động";
   if (days === 0) return "Hôm nay";
   return `${fmtInt(days)} ngày trước`;
 }
@@ -88,4 +88,15 @@ export function peakRanges(items) {
   });
   if (start !== null) ranges.push({ from: start, to: items.length - 1 });
   return ranges;
+}
+
+/** Chuyên cần lấy từ sổ điểm (không có dữ liệu từng buổi): total/absent_sessions là phần trăm quy đổi, thang 100. */
+export function isGradebookAttendance(row) {
+  return row?.attendance_source === "GRADEBOOK" || row?.source === "GRADEBOOK";
+}
+
+/** "3/12 buổi" với dữ liệu theo buổi; "theo sổ điểm" khi số liệu là tỷ lệ quy đổi. */
+export function absenceCountText(row, unit = "") {
+  if (isGradebookAttendance(row)) return "theo sổ điểm";
+  return `${row.absent_sessions}/${row.total_sessions}${unit}`;
 }

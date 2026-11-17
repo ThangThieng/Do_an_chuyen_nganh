@@ -56,17 +56,20 @@ def test_export_enrollment_xlsx(client, admin_headers, courses):
     assert res.headers["x-data-updated-at"]
     workbook = load_workbook(BytesIO(res.content))
     rows = list(workbook["Báo cáo"].iter_rows(values_only=True))
-    assert rows[0][:2] == ("Khoa", "Bộ môn")
+    assert rows[0][:2] == ("Khoa", "Bộ môn / Chuyên ngành")
     assert len(rows) - 1 == len(courses)
-    assert isinstance(rows[1][4], int) and isinstance(rows[1][7], float)          # giữ kiểu số trong Excel
+    assert isinstance(rows[1][4], int) and isinstance(rows[1][7], (int, float))   # giữ kiểu số trong Excel (80.0 đọc lại là 80)
     info = {r[0]: r[1] for r in workbook["Thông tin"].iter_rows(values_only=True)}
     assert info["Năm học – học kỳ"] == "2026-2027 – HK1" and info["Số dòng"] == len(courses)
 
 
 def test_export_risk_pdf(client, admin_headers, courses):
-    # Toàn trường (5 khoa, > 5.000 dòng) vượt giới hạn PDF -> 422 kèm hướng dẫn thu hẹp bộ lọc / xuất Excel
+    # Toàn trường vượt giới hạn PDF -> 422 kèm hướng dẫn thu hẹp bộ lọc / xuất Excel; trong giới hạn -> xuất được
     whole = client.get(EXPORT, params={"report_type": "risk", "format": "pdf"}, headers=admin_headers)
-    assert whole.status_code == 422 and "xuất Excel" in whole.json()["detail"]
+    if sum(c["enrolled"] for c in courses) > get_settings().pdf_max_rows:
+        assert whole.status_code == 422 and "xuất Excel" in whole.json()["detail"]
+    else:
+        assert whole.status_code == 200 and whole.content.startswith(b"%PDF")
     # Khoa lớn nhất nằm trong giới hạn -> xuất được
     enrolled: dict[int, int] = {}
     for c in courses:

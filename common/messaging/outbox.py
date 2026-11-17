@@ -115,7 +115,7 @@ def claim(engine: Engine, *, limit: int = 50, message_ids: Iterable[int] | None 
                             {"now": now(), "limit": limit, **({"ids": ids} if ids is not None else {})}).all()
 
 
-def _deliver_one(row, settings: MessagingSettings, modes: dict) -> Delivery:
+def _deliver_one(row, settings: MessagingSettings, modes: dict, moodle: "MoodleClient | None" = None) -> Delivery:
     mode, warnings = modes[row.channel]
     if mode is None:
         raise DeliveryError("Kênh " + CHANNEL_LABEL[row.channel] + " không dùng được: " + "; ".join(warnings),
@@ -125,7 +125,7 @@ def _deliver_one(row, settings: MessagingSettings, modes: dict) -> Delivery:
         return send_email(settings, mode, to=row.recipient, to_name=row.recipient_name or "", subject=row.subject or "",
                           body=row.body, reply_to=row.sender_email or None, reply_to_name=row.sender_name,
                           tracking_id=tracking)
-    client = MoodleClient(settings)
+    client = moodle or MoodleClient(settings)
     sent = client.send_one(int(row.recipient), row.body, tracking)
     meta = {"conversationid": sent.conversationid, "moodle_url": settings.moodle_public_url or settings.moodle_ws_url}
     base = meta["moodle_url"]
@@ -183,9 +183,29 @@ def deliver(engine: Engine, settings: MessagingSettings, rows: list) -> dict:
         return summary
     with engine.connect() as conn:
         modes = effective_modes(conn, settings)
+    moodle = _moodle_for_batch(rows, settings, modes)
+    try:
+        return _deliver_rows(engine, settings, rows, modes, moodle, summary)
+    finally:
+        if moodle is not None:
+            moodle.close()
+
+
+def _moodle_for_batch(rows: list, settings: MessagingSettings, modes: dict) -> "MoodleClient | None":
+    """Một MoodleClient (một kết nối keep-alive) cho cả lượt gửi, nếu lượt có tin Moodle và kênh dùng được."""
+    if modes.get(CHANNEL_MOODLE, (None,))[0] is None or not any(r.channel == CHANNEL_MOODLE for r in rows):
+        return None
+    try:
+        return MoodleClient(settings)
+    except DeliveryError:
+        return None          # cấu hình thiếu: từng tin sẽ báo lỗi cụ thể qua _deliver_one
+
+
+def _deliver_rows(engine: Engine, settings: MessagingSettings, rows: list, modes: dict,
+                  moodle: "MoodleClient | None", summary: dict) -> dict:
     for row in rows:
         try:
-            delivery = _deliver_one(row, settings, modes)
+            delivery = _deliver_one(row, settings, modes, moodle)
         except DeliveryError as exc:
             with engine.begin() as conn:
                 status = _record_failure(conn, row, exc)

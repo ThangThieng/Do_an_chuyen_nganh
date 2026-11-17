@@ -31,7 +31,7 @@ def export_response(conn: Connection, filters: reports_repo.ReportFilters, fmt: 
 
     updated = stamp(conn)
     doc = ExportDocument(
-        title=title, columns=reports_repo.report_columns(filters.report_type), rows=rows,
+        title=title, columns=reports_repo.visible_columns(filters.report_type, rows), rows=rows,
         filters=[("Dữ liệu tính đến", as_of().strftime("%d/%m/%Y %H:%M")), *description],
         generated_at=datetime.now(TZ))
     try:

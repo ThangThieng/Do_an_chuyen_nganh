@@ -8,13 +8,13 @@ package "Tầng trình bày (React SPA)" {
   component "api (axios + React Query)" as APIC
 }
 package "Tầng dịch vụ (FastAPI)" {
-  component "routers\n(auth, common, admin,\nreports, teacher, system)" as RT
+  component "routers\n(auth, common, meta, admin,\nreports, teacher, system, channels)" as RT
   component "core\n(config, db, security, cache)" as CORE
   component "repositories\n(truy vấn SQL)" as REPO
   component "services\n(Excel, PDF, sao lưu)" as SV
 }
 package "Tầng lưu trữ phân tích" {
-  database "lms_analytics\n(3 bảng fact + bảng phụ trợ)" as AN
+  database "lms_analytics\n(3 bảng fact + 11 bảng phụ trợ)" as AN
 }
 package "Tầng xử lý dữ liệu (ETL – Python)" {
   component "Scheduler\n(APScheduler)" as SCH
@@ -22,8 +22,15 @@ package "Tầng xử lý dữ liệu (ETL – Python)" {
   component "Transform\n(pandas, luật rủi ro)" as TR
   component "Load\n(COPY + UPSERT)" as LD
 }
+package "Gửi tin (common/messaging)" {
+  component "Hàng đợi tin nhắn,\nmẫu tin, chốt chặn gửi thật" as MQ
+  component "Kênh gửi\n(SMTP, Moodle REST)" as CHN
+}
 package "Tầng nguồn dữ liệu" {
-  database "moodle_src\n(25 bảng mdl_*)" as MD
+  database "moodle_src\n(các bảng mdl_*)" as MD
+}
+package "Hệ thống bên ngoài" {
+  component "Moodle Web Service /\nmáy chủ thư" as EXT
 }
 U --> PG : trình duyệt
 PG --> CH
@@ -39,4 +46,9 @@ EX --> TR
 TR --> LD
 EX --> MD : SELECT (chỉ đọc)
 LD --> AN : INSERT ... ON CONFLICT
+RT --> MQ : tạo tin
+SCH --> MQ : nhắc tự động, gửi hàng đợi
+MQ --> AN : outbound_message
+MQ --> CHN
+CHN --> EXT : gửi tin
 @enduml

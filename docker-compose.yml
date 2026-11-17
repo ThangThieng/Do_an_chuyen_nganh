@@ -2,21 +2,21 @@
 #
 #   Copy-Item docker/.env.example docker/.env        # điền BACKEND_JWT_SECRET, BACKEND_SEED_PASSWORD
 #   docker compose --env-file docker/.env up --build -d
-#   Mở http://localhost:8080  (lần đầu dịch vụ init mất vài phút để sinh dữ liệu)
+#   Mở http://localhost:8080  (lần đầu dịch vụ init nạp dữ liệu thật từ REAL_DATA_DIR rồi tính lịch sử, vài phút)
 name: lms-analytics
 
 x-app-env: &app-env
   APP_TIMEZONE: Asia/Ho_Chi_Minh
-  LMS_AS_OF: ${LMS_AS_OF-2026-11-06T10:30:00+07:00}
+  LMS_AS_OF: ${LMS_AS_OF-2026-11-12T15:00:00+07:00}
   ANALYTICS_DB_HOST: db
   ANALYTICS_DB_PORT: "5432"
-  ANALYTICS_DB_NAME: lms_analytics
+  ANALYTICS_DB_NAME: lms_analytics_real
   ANALYTICS_DB_USER: lms
   ANALYTICS_DB_PASSWORD: ${POSTGRES_PASSWORD:-lms_local_only}
   ANALYTICS_DB_MAINTENANCE_DB: postgres
   MOODLE_DB_HOST: db
   MOODLE_DB_PORT: "5432"
-  MOODLE_DB_NAME: moodle_src
+  MOODLE_DB_NAME: moodle_src_real
   MOODLE_DB_USER: lms
   MOODLE_DB_PASSWORD: ${POSTGRES_PASSWORD:-lms_local_only}
   MOODLE_DB_MAINTENANCE_DB: postgres
@@ -70,7 +70,12 @@ services:
     command: ["sh", "docker/bootstrap.sh"]
     environment:
       <<: *app-env
-      BACKFILL_FROM: ${BACKFILL_FROM:-2026-09-07}
+      BACKFILL_FROM: ${BACKFILL_FROM:-2026-09-13}
+      REAL_DATA_DIR: /data/real
+      REAL_DATA_BATCH: ${REAL_DATA_BATCH:-2026-11}
+    volumes:
+      # Thư mục CSV Moodle thật trên máy (chứa Data_11-2026/ và NEW/NEW/), chỉ đọc
+      - ${REAL_DATA_DIR:-./var/real_data}:/data/real:ro
       BACKEND_SEED_PASSWORD: ${BACKEND_SEED_PASSWORD:?Đặt BACKEND_SEED_PASSWORD (mật khẩu ban đầu, >= 8 ký tự) trong docker/.env}
     depends_on:
       db:
@@ -111,7 +116,8 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  # Máy chủ Moodle 3.9 mô phỏng (core_webservice_get_site_info, core_message_send_instant_messages) ghi vào moodle_src.
+  # Máy chủ Moodle 3.9 mô phỏng (core_webservice_get_site_info, core_message_send_instant_messages): chỉ ĐỌC người dùng
+  # từ moodle_src_real, tin nhắn và tài khoản dịch vụ ghi vào CSDL riêng moodle_stub (tự tạo).
   # Bỏ dịch vụ này khi đã trỏ MOODLE_WS_URL tới Moodle thật của trường.
   moodle-stub:
     <<: *python-image
@@ -121,6 +127,7 @@ services:
       MOODLE_STUB_HOST: 0.0.0.0
       MOODLE_STUB_PORT: "8091"
       MOODLE_STUB_PUBLIC_URL: http://localhost:${MOODLE_STUB_PORT:-8091}
+      MOODLE_STUB_DB_NAME: moodle_stub
     # Mở hộp tin sinh viên mô phỏng trên máy: http://localhost:8091/stub/inbox?userid=<mdl_user.id>
     ports:
       - "${MOODLE_STUB_PORT:-8091}:8091"

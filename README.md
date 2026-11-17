@@ -17,13 +17,18 @@ Phiên bản hiện tại: **1.2** (10/2026).
   (tự đổi mật khẩu), trang Trợ giúp.
 - v1.2: làm theo [kế hoạch góp ý giao diện](docs/gop_y_giao_dien/TongHop_GopY_GiaoDien_va_KeHoach_v1.2.docx): so sánh
   khoa/môn, xu hướng rủi ro, điều hướng 4 cấp, minh bạch nguồn dữ liệu, luật cảnh báo theo môn, trung tâm can thiệp đa
-  kênh, dữ liệu mô phỏng 5 khoa theo chuẩn Moodle 3.9.
+  kênh.
+- 16/11/2026: chạy trên **dữ liệu Moodle 3.11 thật** của Khoa CNTT (bản xuất CSV do thầy cô cung cấp). Dữ liệu mô phỏng
+  và mã sinh dữ liệu mô phỏng đã được gỡ bỏ.
+- 17/11/2026: chỉnh các chức năng cho khớp dữ liệu thật: dữ liệu chỉ có một khoa nên so sánh và lọc theo **bộ môn /
+  chuyên ngành**; biểu đồ **Giờ đông / giờ vắng**; tiêu chí cảnh báo tính đúng với bài giao theo nhóm, tài liệu đăng bằng
+  hoạt động Bài tập và nhật ký chỉ có từ 13/09; sửa thứ tự họ tên; bỏ môn không có giảng viên; kiểm thử chạy trên bản sao
+  CSDL. Danh sách đầy đủ và lý do: [SPEC/BAO_CAO_TIEN_DO.md](SPEC/BAO_CAO_TIEN_DO.md) mục 3.9 (dòng 108–127).
 
 ```
-Moodle (moodle_src)  --ETL Python-->  PostgreSQL lms_analytics  --FastAPI-->  React + Chart.js
-  30 bảng mdl_*        5 phút / giờ /    3 bảng fact, luật cảnh báo,  JWT, phân quyền  Quản trị viên
-  5 khoa, 58 môn       đêm               hàng đợi gửi tin             Excel/PDF        Giảng viên
-  6,4 triệu dòng log
+CSV Moodle 3.11 --ingest--> moodle_src_real --ETL Python--> lms_analytics_real --FastAPI--> React + Chart.js
+  (thầy cô cung cấp,         mdl_* (CNTT,        5 phút / giờ /     3 bảng fact, luật     JWT, phân quyền
+   để ngoài repo)            173 môn)            đêm                cảnh báo, hàng đợi    Quản trị viên, Giảng viên
                                          gửi tin nhắn Moodle (Web Service) / email (SMTP) --> sinh viên
 ```
 
@@ -54,7 +59,7 @@ Moodle (moodle_src)  --ETL Python-->  PostgreSQL lms_analytics  --FastAPI-->  Re
 
 | Công nghệ | Phiên bản | Vai trò trong dự án |
 |---|---|---|
-| **PostgreSQL** | 18 | Hai CSDL: `moodle_src` (nguồn, mô phỏng Moodle) và `lms_analytics` (kho phân tích) |
+| **PostgreSQL** | 18 | Hai CSDL: `moodle_src_real` (nguồn, bản sao dữ liệu Moodle thật) và `lms_analytics_real` (kho phân tích) |
 | **psycopg** | 3.2 | Driver PostgreSQL cho Python, dùng `COPY` để nạp hàng loạt |
 | **SQLAlchemy Core** | 2.0 | Quản lý connection pool, viết SQL có tham số bind |
 
@@ -66,7 +71,7 @@ Migration tự viết (`database/migrate.py`), không dùng Alembic: file SQL đ
 |---|---|---|
 | **Python** | 3.11+ | Ngôn ngữ chính |
 | **pandas** | 2.2 | Gộp, tính toán chỉ số trên bảng dữ liệu |
-| **NumPy** | 1.26 | Sinh dữ liệu giả lập, tính vector hóa |
+| **NumPy** | 1.26 | Tính toán vector hóa (dùng qua pandas) |
 | **APScheduler** | 3.10 | Lập lịch chạy job tự động (mỗi phút / 5 phút / giờ / đêm / tuần) |
 
 ### Tầng API
@@ -132,7 +137,7 @@ Migration tự viết (`database/migrate.py`), không dùng Alembic: file SQL đ
 | Node.js | 18 (bản LTS) | Đã kèm npm |
 | Git | bất kỳ | Để clone dự án |
 
-Dung lượng đĩa cần: khoảng **5 GB** (mã nguồn và thư viện khoảng 250 MB, hai CSDL 3,9 GB với dữ liệu mô phỏng 5 khoa).
+Dung lượng đĩa cần: khoảng **3 GB** (mã nguồn và thư viện khoảng 250 MB, hai CSDL khoảng 1,4 GB với dữ liệu thật, thư mục CSV khoảng 1,4 GB).
 
 ### Cách 2: chạy bằng Docker
 
@@ -167,7 +172,7 @@ notepad .env
 ANALYTICS_DB_PASSWORD=<mật khẩu postgres trên máy bạn>
 MOODLE_DB_PASSWORD=<mật khẩu postgres trên máy bạn>
 BACKEND_JWT_SECRET=<sinh bằng lệnh bên dưới>
-LMS_AS_OF=2026-11-06T10:30:00+07:00
+LMS_AS_OF=2026-11-12T15:00:00+07:00
 ```
 
 Sinh khóa JWT ngẫu nhiên:
@@ -176,36 +181,49 @@ Sinh khóa JWT ngẫu nhiên:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-> **Lưu ý: `LMS_AS_OF` phải đúng như dòng trên.** Đây là "thời điểm tham chiếu" cố định đồng hồ của toàn hệ thống. Dữ liệu
-> giả lập mô phỏng học kỳ 1 năm học 2026-2027 (bắt đầu 07/09/2026), mốc `2026-11-06` là tuần 9. Đặt sai giá trị này thì dữ
-> liệu sinh ra sẽ khác và không đối chiếu được với tài liệu. Để trống khi chạy với Moodle thật (dùng thời gian thực).
+> **Lưu ý: `LMS_AS_OF` là "thời điểm tham chiếu"**, cố định đồng hồ của toàn hệ thống theo mốc cuối của đợt dữ
+> liệu thật (bản xuất ngày 12/11/2026). Để trống khi kết nối Moodle đang chạy (dùng thời gian thực).
 
 Các biến khác trong `.env.example` (kênh gửi tin, SMTP, Moodle Web Service, font PDF...) đã có giá trị mặc định dùng được
 cho demo, mỗi biến có chú thích ngay trong file.
 
-### 3.3 Cài đặt và dựng dữ liệu
+**Tệp sửa họ tên (tùy chọn).** Một số tài khoản Moodle nhập ngược ô họ / tên hoặc gõ không dấu. Hệ thống tự đảo lại khi chắc
+chắn; tên cần sửa tay (thêm dấu) ghi vào `var/name_overrides.csv` (thư mục `var/` không lên Git vì chứa tên thật):
 
-Chạy lần lượt, đợi từng lệnh xong hẳn. Tổng thời gian khoảng **45 phút** (đo trên Intel i5-12450H, 16 GB RAM).
-
-```powershell
-# 1. Cài thư viện Python và npm, tạo bảng trong 2 CSDL                 (khoảng 3 phút)
-.\scripts\lms.ps1 setup
-
-# 2. Sinh cấu trúc Moodle: 5 khoa, 58 môn, 3.000 SV, 28 giảng viên       (khoảng 1 phút)
-.\scripts\lms.ps1 seed
-
-# 3. Sinh hành vi học tập: 6,4 triệu dòng log truy cập                  (khoảng 7 phút)
-.\scripts\lms.ps1 mock
-
-# 4. Chạy ETL nạp lịch sử 3 bảng fact (07/09 đến 06/11/2026)            (khoảng 32 phút)
-.\scripts\lms.ps1 etl-backfill
-
-# 5. Tạo 29 tài khoản đăng nhập (1 quản trị viên và 28 giảng viên)
-$env:BACKEND_SEED_PASSWORD = "Lms@2026demo"
-.\scripts\lms.ps1 users
+```csv
+user_id,ho_dem,ten,ghi_chu
+12345,Nguyễn Văn,An,thêm dấu
 ```
 
-Trên Linux/macOS dùng `make setup`, `make seed`... (xem [Makefile](Makefile)).
+Sau khi sửa tệp: chạy lại `.\scripts\lms.ps1 users` (tên tài khoản web) và `.\scripts\lms.ps1 etl-backfill` (tên sinh viên).
+
+### 3.3 Cài đặt và dựng dữ liệu
+
+Dữ liệu là bản xuất CSV từ Moodle 3.11 của trường (thầy cô cung cấp), **không có trong repo** vì chứa thông tin sinh viên
+thật. Đặt thư mục dữ liệu ở ngoài thư mục đồ án, gồm hai thư mục con `Data_11-2026\` và `NEW\NEW\`.
+
+```powershell
+# 1. Cài thư viện Python và npm, tạo bảng trong 2 CSDL                      (khoảng 3 phút)
+.\scripts\lms.ps1 setup
+
+# 2. Nạp CSV Moodle thật vào moodle_src_real (chỉ các môn Khoa CNTT)          (khoảng 1–2 phút)
+$env:REAL_DATA_DIR = "D:\duong\dan\toi\Data_11-2026"
+.\scripts\lms.ps1 ingest
+
+# 3. Chạy ETL tính lịch sử 3 bảng fact (13/09 đến 12/11/2026)                 (khoảng 3–4 phút)
+.\scripts\lms.ps1 etl-backfill
+
+# 4. Tạo tài khoản: 1 quản trị viên + các giảng viên có trong dữ liệu, rồi đặt mật khẩu
+.\scripts\lms.ps1 users
+python -m backend.app.cli set-password --username admin
+python -m backend.app.cli set-password --username <tên đăng nhập giảng viên>
+```
+
+Môn không có ai mang vai trò giảng viên / trợ giảng trong Moodle không được đưa vào thống kê. Tài khoản giảng viên thiếu
+trong tệp người dùng đợt 2 được bổ sung tự động từ tệp đợt 1 (chỉ có tên đăng nhập; họ tên lấy từ tệp sửa họ tên).
+
+Trên Linux/macOS dùng `make setup`, `make ingest REAL_DATA_DIR=...`, `make etl-backfill`... (xem [Makefile](Makefile)).
+Chi tiết bước nạp, các bảng đã có và các bảng thầy cô không cung cấp được: [docs/du_lieu_that/](docs/du_lieu_that/).
 
 ### 3.4 Chạy hệ thống
 
@@ -235,6 +253,9 @@ Cửa sổ 3 (cần khi muốn gửi tin nhắn Moodle), máy chủ Moodle 3.9 m
 ```
 
 Chạy ở `http://localhost:8091`. Xem hộp tin của một sinh viên tại `http://localhost:8091/stub/inbox?userid=<mdl_user.id>`.
+Máy chủ này **chỉ đọc** danh sách người dùng từ `moodle_src_real`; tin nhắn và tài khoản gửi tin `lmsanalytics` được ghi vào
+CSDL riêng `moodle_stub` (tự tạo lần đầu), không làm thay đổi dữ liệu thật. Khi có địa chỉ và token Web Service của Moodle
+thật, đặt `MOODLE_WS_URL`, `MOODLE_WS_TOKEN`, `MOODLE_WS_ENV=live` và không cần chạy máy chủ này.
 Email ở chế độ mặc định được ghi thành file `.eml` trong `var/mail_outbox/` (mở bằng Outlook/Thunderbird).
 
 Cửa sổ 4 (tùy chọn), ETL chạy theo lịch, gồm cả nhắc tự động và gửi hàng đợi tin nhắn mỗi phút:
@@ -248,9 +269,8 @@ Cửa sổ 4 (tùy chọn), ETL chạy theo lịch, gồm cả nhắc tự độ
 | Lệnh tắt | Lệnh đầy đủ tương đương | Tác dụng |
 |---|---|---|
 | `lms.ps1 setup` | `pip install -r requirements.txt` + `npm install` + `python -m database.migrate up` | Cài thư viện, tạo bảng |
-| `lms.ps1 seed` | `python -m mockdata.seed_structure --reset` | Sinh cấu trúc Moodle |
-| `lms.ps1 mock` | `python -m mockdata.generate_activity --reset` | Sinh hành vi học tập |
-| `lms.ps1 etl-backfill` | `python -m etl.jobs.backfill --from 2026-09-07` | Nạp lịch sử 3 bảng fact |
+| `lms.ps1 ingest` | `python -m ingest.run --data-dir <thư mục CSV> --batch 2026-11` | Nạp CSV Moodle thật (`$env:REAL_DATA_DIR`) |
+| `lms.ps1 etl-backfill` | `python -m etl.jobs.backfill --from 2026-09-13` | Tính lịch sử 3 bảng fact |
 | `lms.ps1 users` | `python -m backend.app.cli sync-users` | Tạo/cập nhật tài khoản từ Moodle |
 | `lms.ps1 api` | `python -m uvicorn backend.app.main:app --port 8000` | Chạy Backend |
 | `lms.ps1 web` | `cd frontend; npm run dev` | Chạy Frontend |
@@ -259,7 +279,7 @@ Cửa sổ 4 (tùy chọn), ETL chạy theo lịch, gồm cả nhắc tự độ
 | `lms.ps1 messaging-check` | `python -m backend.app.cli messaging-check [--send-test-email <địa chỉ>]` | In cấu hình kênh gửi tin (che bí mật), thử kết nối SMTP/Moodle |
 | `lms.ps1 test` | `python -m pytest -q` + `npm test` | Kiểm thử |
 | `lms.ps1 e2e` | `npx playwright test` | Kiểm thử giao diện trên trình duyệt thật |
-| `lms.ps1 bench` | `python -m perf.build_x10` + `explain_queries` | Đo hiệu năng |
+| `lms.ps1 bench` | `python -m perf.explain_queries --dataset x1` | Đo thời gian các câu truy vấn của Dashboard |
 | `lms.ps1 docker` | `docker compose up --build -d` | Demo bằng Docker |
 
 Các lệnh quản trị khác (chạy trực tiếp):
@@ -271,7 +291,6 @@ Các lệnh quản trị khác (chạy trực tiếp):
 | `python -m backend.app.cli backup` | Sao lưu dữ liệu CSDL phân tích ra file zip trong `backups/` |
 | `python -m backend.app.cli list-backups` | Liệt kê các bản sao lưu |
 | `python -m backend.app.cli restore --file <tên file>.zip` | Phục hồi từ một bản sao lưu |
-| `python -m etl.jobs.reset_demo --yes` | Chỉ ở chế độ demo: xóa dữ liệu đã tính, tin nhắn, luật riêng của môn trong kho phân tích (giữ tài khoản, luật mặc định) để backfill lại |
 
 ### 3.6 Chạy bằng Docker (không cần cài PostgreSQL/Python/Node)
 
@@ -284,14 +303,15 @@ notepad docker/.env
 
 ```ini
 BACKEND_JWT_SECRET=<chuỗi ngẫu nhiên từ 32 ký tự trở lên>
-BACKEND_SEED_PASSWORD=Lms@2026demo
+BACKEND_SEED_PASSWORD=<mật khẩu ban đầu, từ 8 ký tự>
+REAL_DATA_DIR=<thư mục CSV Moodle thật, ví dụ D:/duong/dan/toi/Data_11-2026>
 ```
 
 Rồi chạy:
 
 ```powershell
 docker compose --env-file docker/.env up --build -d
-docker compose --env-file docker/.env logs -f init    # chờ dòng "[init] Hoàn tất." (khoảng 40-50 phút với dữ liệu 5 khoa)
+docker compose --env-file docker/.env logs -f init    # chờ dòng "[init] Hoàn tất." (khoảng 5–10 phút)
 ```
 
 Mở **`http://localhost:8080`**.
@@ -301,7 +321,7 @@ Compose gồm 6 dịch vụ:
 | Dịch vụ | Vai trò |
 |---|---|
 | `db` | PostgreSQL 18, cổng **không** mở ra máy |
-| `init` | Chạy một lần: migrate, seed, mock, ETL backfill, tạo tài khoản |
+| `init` | Chạy một lần: migrate, nạp CSV thật từ `REAL_DATA_DIR` (gắn chỉ đọc), ETL backfill, tạo tài khoản |
 | `etl` | APScheduler chạy nền (gồm gửi hàng đợi tin nhắn) |
 | `backend` | FastAPI, 2 worker |
 | `moodle-stub` | Máy chủ Moodle 3.9 mô phỏng cho kênh tin nhắn, mở cổng **8091** để xem hộp tin sinh viên. Bỏ đi khi trỏ `MOODLE_WS_URL` tới Moodle thật |
@@ -371,7 +391,7 @@ Trang Tổng quan, từ trên xuống:
 | SV đăng ký | Lượt ghi danh còn hiệu lực (một SV học 4 môn tính 4 lượt), kèm **số sinh viên khác nhau** |
 | SV tương tác | Lượt ghi danh có ít nhất một hoạt động trong môn, kèm tỷ lệ % |
 | Online hiện tại | Người dùng hoạt động trong 5 phút gần nhất, tự làm mới mỗi 60 giây |
-| Peak hôm nay | Giờ có nhiều truy cập nhất hôm nay |
+| Giờ nhiều hoạt động nhất hôm nay | Giờ có nhiều lượt hoạt động nhất hôm nay |
 | SV nguy cơ cao | Số lượt ghi danh mức Nguy cơ cao, kèm tỷ lệ và **thay đổi so với tuần trước** |
 
 Rê chuột lên tên thẻ để xem giải thích; liên kết **Cách tính** mở ngăn nguồn dữ liệu.
@@ -385,7 +405,11 @@ thị đánh dấu ngày một môn đổi luật cảnh báo.
 bốn). **Nhấn cột hoặc dòng** để mở trang Khoa. Khi có hơn 8 khoa, biểu đồ tự chuyển sang thanh ngang và hiện 10 khoa lớn
 nhất kèm "Xem tất cả".
 
-**Phần 5: Hoạt động hệ thống.** Lưu lượng 2 trục (24 giờ / 7 ngày) và heatmap giờ x thứ của 4 tuần.
+> **Dữ liệu chỉ có một khoa** (như dữ liệu Khoa CNTT hiện tại): khối này tự chuyển thành **So sánh giữa các bộ môn /
+> chuyên ngành** của khoa đó, đường trung bình ghi "TB toàn khoa", ô chọn khoa trên thanh lọc được thay bằng ô chọn bộ môn.
+> Nhấn một bộ môn để mở trang Khoa đã lọc sẵn bộ môn đó.
+
+**Phần 5: Hoạt động hệ thống.** Lưu lượng 2 trục (24 giờ / 7 ngày) và biểu đồ **Giờ đông / giờ vắng** của 4 tuần.
 
 > Mọi biểu đồ có nút **"Biểu đồ | Bảng"** để xem cùng số liệu dạng bảng, và liên kết **"Nguồn & cách tính"**.
 
@@ -396,6 +420,7 @@ nhất kèm "Xem tất cả".
 **Trang Khoa.** KPI của khoa luôn kèm số toàn trường để so sánh; biểu đồ tròn và xu hướng của khoa; **So sánh các môn
 trong khoa** (chọn chỉ số Tỷ lệ tương tác / Nộp bài / Chuyên cần, xếp từ thấp lên cao, đường nét đứt là trung bình khoa;
 môn chưa có dữ liệu ghi "chưa có dữ liệu" thay vì vẽ 0%) và phân bố mức rủi ro theo môn; ô tìm môn, lọc theo bộ môn.
+Khi lọc một bộ môn, thẻ KPI, biểu đồ tròn, xu hướng và đường trung bình đều tính riêng cho bộ môn đó.
 Bảng môn học có cột **% Nguy cơ cao**, **Luật cảnh báo** (Mặc định / Riêng) và nút **Xem SV**.
 
 ![Trang môn học](docs/images/report/mh02_cap_mon_hoc.png)
@@ -419,9 +444,12 @@ và thời điểm cập nhật. Nội dung đọc từ API, cùng nguồn với
 |---|---|
 | Chọn khoảng ngày | Có sẵn mốc nhanh: hôm nay, 7 ngày, 30 ngày, 90 ngày |
 | Thẻ **Online hiện tại** | Số người hoạt động trong 5 phút gần nhất, giờ lấy mẫu; tự làm mới mỗi 60 giây |
-| Biểu đồ 2 trục | Requests/giờ và người online |
-| **Top 10 giờ đông nhất** | Cho biết chính xác giờ nào tải cao nhất |
-| Heatmap | Chọn được 1-12 tuần |
+| Biểu đồ 2 trục | Lượt hoạt động/giờ (số sự kiện trong nhật ký các môn) và người online |
+| **Top 10 giờ đông người nhất** | Xếp theo số người online cùng lúc |
+| **Giờ đông / giờ vắng** | Ô càng đậm càng đông (số người online trung bình theo giờ × thứ, 1–12 tuần), kèm một dòng: giờ đông nhất (cần giám sát) và khung giờ vắng nhất (hợp để bảo trì) |
+
+> Nhật ký hiện có chỉ gồm hoạt động trong các môn học (không có đăng nhập, trang chủ, ứng dụng điện thoại) nên số người là
+> ước tính thấp hơn thực tế; dùng để so sánh giờ đông / vắng.
 
 ### 4.5 Trang Báo cáo
 
@@ -557,7 +585,7 @@ Mỗi hành động được ghi vào nhật ký can thiệp kèm mức rủi ro
 | Thành phần | Cho biết điều gì |
 |---|---|
 | Ba thanh tiến độ | Hoàn thành hoạt động, Nộp bài, Chuyên cần |
-| Tiến độ từng chương/tuần | Lớp đang học tới đâu, chương nào bị bỏ lại |
+| Tiến độ từng chương/tuần | Lớp đang học tới đâu, chương nào bị bỏ lại (môn không theo dõi hoàn thành: % SV đã mở nội dung của chương) |
 | Biểu đồ sinh viên hoạt động | Theo tuần hoặc theo ngày |
 | Biểu đồ tỷ lệ tiến độ | Xu hướng theo thời gian |
 
@@ -640,53 +668,16 @@ ngang.
 
 ## 5. Tài khoản đăng nhập
 
-Mật khẩu mặc định của **tất cả** tài khoản: `Lms@2026demo`
-(chính là giá trị `BACKEND_SEED_PASSWORD` đặt ở bước 3.3).
+Tài khoản được tạo từ dữ liệu Moodle bằng `.\scripts\lms.ps1 users`:
 
-### Quản trị viên
+- **Quản trị viên:** `admin`. Xem Tổng quan (Toàn trường > Khoa > Môn > Sinh viên), Lưu lượng, Báo cáo, Danh mục, Hệ thống.
+- **Giảng viên:** mọi người có vai trò `editingteacher` (giảng viên chính) hoặc `teacher` (trợ giảng) trong ít nhất một môn
+  đang tính. Tên đăng nhập trùng tên đăng nhập Moodle. Trợ giảng xem và xem trước luật cảnh báo nhưng không lưu được.
 
-| Tên hiển thị | Username | Vai trò | Xem được gì |
-|---|---|---|---|
-| Quản trị Hệ thống | `admin` | ADMIN | Tổng quan (Toàn trường > Khoa > Môn > Sinh viên), Lưu lượng, Báo cáo, Danh mục, Hệ thống (Quản lý người dùng, Nhật ký ETL, Sao lưu và phục hồi, Kênh gửi tin) |
+Mật khẩu ban đầu là chuỗi ngẫu nhiên không lưu lại (hoặc giá trị `BACKEND_SEED_PASSWORD` nếu đặt khi chạy `users`). Đặt
+mật khẩu cho từng người trước khi dùng (xem bên dưới). Xem danh sách tài khoản: `python -m backend.app.cli list-users`.
 
-### Giảng viên
-
-28 giảng viên của 5 khoa. "(trợ giảng)" là vai trò `teacher` trong Moodle: xem và xem trước luật cảnh báo nhưng không lưu
-được; các môn còn lại là giảng viên chính (`editingteacher`). Số SV là tổng lượt ghi danh các môn phụ trách.
-
-| Khoa | Tên hiển thị | Username | Môn phụ trách | Số SV |
-|---|---|---|---|---:|
-| Công nghệ Thông tin | Trần Minh Hùng | `gv.tranminhhung` | IT001, IT002 | 385 |
-| Công nghệ Thông tin | Nguyễn Thị Lan | `gv.nguyenthilan` | IT003, IT010 | 299 |
-| Công nghệ Thông tin | Lê Quốc Bảo | `gv.lequocbao` | IT004, IT005 | 266 |
-| Công nghệ Thông tin | Phạm Thu Hà | `gv.phamthuha` | IT006, IT011 | 379 |
-| Công nghệ Thông tin | Võ Thanh Tâm | `gv.vothanhtam` | IT007, IT008 | 277 |
-| Công nghệ Thông tin | Đặng Ngọc Ánh | `gv.dangngocanh` | IT009, IT012 | 361 |
-| Công nghệ Thông tin | Bùi Đức Thắng | `gv.buiducthang` | IT004 (trợ giảng), IT013, IT014 | 377 |
-| Công nghệ Thông tin | Hồ Hải Yến | `gv.hohaiyen` | IT001 (trợ giảng), IT009 (trợ giảng), IT015 | 571 |
-| Kinh tế - Quản trị kinh doanh | Nguyễn Văn Khánh | `gv.nguyenvankhanh` | KT106, KT107, KT112 | 880 |
-| Kinh tế - Quản trị kinh doanh | Trần Thị Mỹ | `gv.tranthimy` | KT108, KT109, KT110 | 842 |
-| Kinh tế - Quản trị kinh doanh | Lê Hoàng Nam | `gv.lehoangnam` | KT101, KT111 | 512 |
-| Kinh tế - Quản trị kinh doanh | Phạm Ngọc Quỳnh | `gv.phamngocquynh` | KT103, KT104 | 632 |
-| Kinh tế - Quản trị kinh doanh | Đoàn Minh Trí | `gv.doanminhtri` | KT102, KT105, KT110 (trợ giảng) | 748 |
-| Ngoại ngữ | Nguyễn Thùy Trang | `gv.nguyenthuytrang` | NN101_N01, NN202, NN207 | 657 |
-| Ngoại ngữ | Lê Thanh Thảo | `gv.lethanhthao` | NN101_N02, NN203, NN208 | 701 |
-| Ngoại ngữ | Hoàng Diệu Linh | `gv.hoangdieulinh` | NN101_N03, NN204 | 468 |
-| Ngoại ngữ | Trần Quốc Việt | `gv.tranquocviet` | NN101_N04, NN205 | 496 |
-| Ngoại ngữ | Võ Thu Hương | `gv.vothuhuong` | NN201, NN203 (trợ giảng), NN206 | 767 |
-| Luật | Phạm Văn Thắng | `gv.phamvanthang` | LU103, LU106 | 435 |
-| Luật | Nguyễn Thị Hoa | `gv.nguyenthihoa` | LU107, LU109 | 364 |
-| Luật | Đặng Quang Huy | `gv.dangquanghuy` | LU105, LU108 | 557 |
-| Luật | Bùi Ngọc Mai | `gv.buingocmai` | LU101, LU102 | 415 |
-| Luật | Lê Đình Khôi | `gv.ledinhkhoi` | LU104, LU108 (trợ giảng), LU110 | 607 |
-| Sinh học | Huỳnh Thanh Sơn | `gv.huynhthanhson` | SH101, SH102 | 434 |
-| Sinh học | Nguyễn Kim Ngân | `gv.nguyenkimngan` | SH104, SH107 | 431 |
-| Sinh học | Trần Văn Lộc | `gv.tranvanloc` | SH106, SH109 | 474 |
-| Sinh học | Phan Thị Yến | `gv.phanthiyen` | SH103, SH105 | 396 |
-| Sinh học | Ngô Quang Trường | `gv.ngoquangtruong` | SH102 (trợ giảng), SH108 | 389 |
-
-Tài khoản nên dùng để demo: `gv.hohaiyen` (3 môn, nhiều dữ liệu nhất của CNTT), `gv.nguyenthilan` (giảng viên chính cả 2
-môn, thử được đầy đủ Thiết lập cảnh báo và Can thiệp), hoặc bất kỳ giảng viên khoa khác để so sánh.
+> Danh sách giảng viên là dữ liệu thật nên không ghi trong tài liệu này.
 
 ### Đổi mật khẩu
 
@@ -717,35 +708,24 @@ Sau khi `git clone`, hệ thống **chưa chạy được ngay**. Những thứ 
 |---|---:|---|---|
 | **`.env`** | vài KB | Chứa mật khẩu và khóa JWT, đưa lên Git là lộ bí mật | `Copy-Item .env.example .env` rồi điền (mục 3.2) |
 | **`docker/.env`** | vài KB | Như trên | `Copy-Item docker/.env.example docker/.env` |
+| **Thư mục CSV Moodle thật** | ~1,4 GB | Chứa thông tin sinh viên thật; chỉ thầy cô cung cấp | Xin thầy cô, đặt ngoài thư mục đồ án |
 | **`frontend/node_modules`** | **160 MB** | Thư viện tải về, `package-lock.json` đã ghi đủ phiên bản | `cd frontend; npm install` |
-| **CSDL `moodle_src`** | **2,6 GB** | Nằm trong PostgreSQL, không nằm trong thư mục dự án | `lms.ps1 seed` + `lms.ps1 mock` |
-| **CSDL `lms_analytics`** | **1,25 GB** | Như trên | `lms.ps1 setup` + `lms.ps1 etl-backfill` |
+| **CSDL `moodle_src_real`** | **1,2 GB** | Nằm trong PostgreSQL, không nằm trong thư mục dự án | `lms.ps1 setup` + `lms.ps1 ingest` |
+| **CSDL `lms_analytics_real`** | **0,2 GB** | Như trên | `lms.ps1 setup` + `lms.ps1 etl-backfill` |
 | **`frontend/dist`** | 1,5 MB | Bản build, sinh ra từ mã nguồn | `npm run build` |
-| **`backups/`, `var/`, `logs/`** | tùy | Bản sao lưu, email demo (chứa dữ liệu sinh viên), log sinh ra khi chạy | Tự sinh khi dùng |
+| **`backups/`, `var/`, `logs/`** | tùy | Bản sao lưu, email đã soạn (chứa dữ liệu sinh viên), log sinh ra khi chạy | Tự sinh khi dùng |
 
-### Vì sao không cần gửi kèm cơ sở dữ liệu?
+### Kiểm tra dữ liệu đã nạp đúng
 
-File [mockdata/config.py](mockdata/config.py) đặt `RANDOM_SEED = 2026` **cố định**. Mọi máy chạy `seed` + `mock` với cùng
-`LMS_AS_OF` sẽ sinh ra dữ liệu **giống hệt nhau, từng dòng một**.
-
-Kiểm chứng bằng lệnh sau (snapshot ngày 05/11/2026, chấm hoàn toàn bằng luật mặc định của trường):
+Sau khi chạy `ingest` và `etl-backfill` với đợt dữ liệu 11/2026, ngày 12/11/2026 phải có 38 môn đang tính, 2.249 lượt ghi
+danh (1.164 sinh viên) và phân bố mức rủi ro: Nguy cơ cao 746, Cần lưu ý 747, An toàn 756.
 
 ```powershell
-python -c "import sys; sys.path.insert(0,'.'); import psycopg; from database.config import load_db_config; conn=psycopg.connect(**load_db_config('ANALYTICS_DB').conninfo()); print(conn.execute(\"SELECT risk_level, count(*) FROM analytics.fact_student_risk_summary WHERE snapshot_date='2026-11-05' GROUP BY 1 ORDER BY 1\").fetchall())"
+python -c "import sys; sys.path.insert(0,'.'); import psycopg; from database.config import load_db_config; conn=psycopg.connect(**load_db_config('ANALYTICS_DB').conninfo()); print(conn.execute(\"SELECT risk_level, count(*) FROM analytics.fact_student_risk_summary WHERE snapshot_date='2026-11-12' GROUP BY 1 ORDER BY 1\").fetchall())"
 ```
 
-Kết quả phải khớp với bảng dưới:
-
-| Mức rủi ro | Số lượng phải ra |
-|---|---:|
-| GREEN (An toàn) | 8.232 |
-| RED (Nguy cơ cao) | 1.856 |
-| YELLOW (Cần lưu ý) | 2.495 |
-
-Ra số khác nghĩa là `LMS_AS_OF` trong `.env` chưa đúng. Số liệu của ngày 06/11 (ngày "hôm nay" của bản demo) có thể khác
-nếu đã có giảng viên lưu luật riêng cho môn, vì luật riêng áp dụng ngay cho số liệu hôm nay.
-
----
+Nếu giảng viên đã lưu luật cảnh báo riêng cho môn thì số liệu ngày 12/11 có thể khác, vì luật riêng áp dụng ngay cho số liệu
+hôm nay.
 
 ## 7. Cách web hoạt động
 
@@ -796,13 +776,13 @@ nếu đã có giảng viên lưu luật riêng cho môn, vì luật riêng áp 
 
 | Vấn đề khi truy vấn thẳng Moodle | Giải pháp của dự án |
 |---|---|
-| Phải JOIN 12 bảng, quét 6,4 triệu dòng log, mất **vài phút** | Tính trước, lưu sẵn vào bảng fact; mỗi câu SQL của dashboard **dưới 10 ms** |
+| Phải JOIN 12 bảng, quét hàng trăm nghìn tới hàng triệu dòng log, mất **vài phút** | Tính trước, lưu sẵn vào bảng fact; mỗi câu SQL của dashboard **dưới 10 ms** |
 | Chạy truy vấn nặng làm chậm Moodle mà sinh viên đang dùng thật | ETL kết nối **read-only** có timeout, chạy theo lịch |
 | Moodle không có khái niệm "học kỳ", "mức rủi ro" | ETL tự suy ra và lưu vào bảng fact |
 
 ### 7.3 Vòng đời một request
 
-Ví dụ: giảng viên Bùi Đức Thắng mở trang Cảnh báo môn IT004.
+Ví dụ: một giảng viên mở trang Cảnh báo của một môn mình phụ trách (mã môn 6 trong ví dụ).
 
 ```
 Bước 1. TRÌNH DUYỆT gửi
@@ -854,12 +834,22 @@ nằm ở [etl/config.py](etl/config.py):
 | Tiêu chí | 0 điểm | 1 điểm | 2 điểm |
 |---|---|---|---|
 | **C1** Vắng học | dưới 15% | 15% đến dưới 30% | từ 30% |
-| **C2** Không tương tác | truy cập trong 7 ngày và không thấp | quá 7 ngày chưa truy cập, hoặc số lần truy cập 14 ngày dưới 50% trung vị lớp | quá 14 ngày hoặc chưa từng truy cập |
+| **C2** Không tương tác | hoạt động trong 7 ngày và không thấp | quá 7 ngày không hoạt động, hoặc số lần truy cập 14 ngày dưới 50% trung vị lớp | quá 14 ngày hoặc không có hoạt động nào |
 | **C3** Thiếu bài tập | dưới 20% bài đã tới hạn | 20% đến dưới 60% | từ 60% |
+
+Cách lấy số liệu trên dữ liệu thật:
+
+- **C1**: theo buổi điểm danh nếu có, không thì theo điểm chuyên cần trong sổ điểm. Môn không có cả hai: tiêu chí không áp
+  dụng (không tính vào điểm, các tiêu chí còn lại được chia lại trọng số).
+- **C2**: "hoạt động cuối" là mốc muộn nhất giữa nhật ký truy cập, lần nộp bài và lần làm bài kiểm tra (nhật ký chỉ có từ
+  13/09/2026 trong khi nhiều môn mở từ tháng 8).
+- **C3**: gồm bài tập và bài kiểm tra có hạn; bài chỉ giao cho một nhóm thì chỉ tính cho sinh viên trong nhóm; mục đã tới hạn
+  mà cả lớp không ai nộp (thường là tài liệu đăng bằng hoạt động Bài tập) không tính.
 
 Xếp mức:
 
-- **Nguy cơ cao (RED)**: C2 được 2 điểm, hoặc có từ 2 tiêu chí được 2 điểm, hoặc tổng điểm từ 4.
+- **Nguy cơ cao (RED)**: C2 được 2 điểm, hoặc có từ 2 tiêu chí được 2 điểm, hoặc tổng điểm từ 4 (môn chỉ có 2 tiêu chí có
+  dữ liệu: từ 3; 1 tiêu chí: từ 2).
 - **Cần lưu ý (YELLOW)**: tổng điểm từ 1.
 - **An toàn (GREEN)**: tổng điểm bằng 0.
 
@@ -890,13 +880,13 @@ trang Hệ thống > Nhật ký ETL).
 
 ### 8.1 Hai cơ sở dữ liệu cần phân biệt
 
-| | `moodle_src` | `lms_analytics` |
+| | `moodle_src_real` | `lms_analytics_real` |
 |---|---|---|
-| Vai trò | **Nguồn**, mô phỏng Moodle thật | **Đích**, kho phân tích |
+| Vai trò | **Nguồn**, bản sao dữ liệu Moodle thật (Khoa CNTT) | **Đích**, kho phân tích |
 | Schema | `public` | `analytics` |
-| Số bảng | 30 (`mdl_*`) | 14 |
-| Dung lượng | 2,6 GB | 1,25 GB |
-| Ai ghi vào | `mockdata/` (và máy chủ Moodle mô phỏng khi gửi tin) | `etl/`, `backend/` |
+| Số bảng | 38 (`mdl_*`) + vùng đệm `stg` | 14 |
+| Dung lượng | 1,2 GB | 0,2 GB |
+| Ai ghi vào | `ingest/` (và máy chủ Moodle mô phỏng khi gửi tin) | `etl/`, `backend/` |
 | Ai đọc | `etl/` (chỉ đọc) | `backend/` |
 
 ### 8.2 Xem bằng psql (dòng lệnh)
@@ -1052,7 +1042,7 @@ python -m database.migrate status --target moodle
 Do_an_chuyen_nganh/
   common/       Tiện ích dùng chung: thời gian AS_OF, danh mục chỉ số, kênh gửi tin
   database/     Tầng 1: migration CSDL
-  mockdata/     Sinh dữ liệu giả lập Moodle
+  ingest/       Nạp CSV Moodle thật vào CSDL nguồn
   etl/          Tầng 2: Extract, Transform, Load
   backend/      Tầng 4: REST API
   frontend/     Tầng 5: giao diện web
@@ -1131,16 +1121,14 @@ Do_an_chuyen_nganh/
 > Cấu trúc các bảng này sao chép nguyên văn từ **Moodle 3.9 thật**. Khi có Moodle thật, chỉ cần đổi thông tin kết nối trong
 > `.env` là ETL chạy được, không phải sửa mã.
 
-### 9.4 `mockdata/`: sinh dữ liệu giả lập
+### 9.4 `ingest/`: nạp dữ liệu Moodle thật
 
 | File | Tác dụng |
 |---|---|
-| `config.py` | Tham số sinh dữ liệu: `RANDOM_SEED = 2026`, danh sách `FACULTIES` (5 khoa: bộ môn, môn và loại môn LT/TH/ĐA, số SV, giảng viên, tỷ lệ hồ sơ hành vi, hệ số truy cập), lớp Tiếng Anh dùng chung, tài khoản dịch vụ gửi tin, trọng số theo giờ và thứ |
-| `db.py` | Kết nối `moodle_src`, dùng `COPY` ghi hàng loạt |
-| `names.py` | Sinh họ tên tiếng Việt có tính tái lập |
-| `seed_structure.py` | Dựng bộ khung: vai trò, cây Khoa > Bộ môn > Môn, 28 giảng viên, 3.000 SV, ghi danh, bài tập và hoạt động điểm danh theo loại môn, tùy chọn nhận tin |
-| `generate_activity.py` | Sinh hành vi học tập: 6,4 triệu dòng log, 48.144 bài nộp, 180.786 lượt điểm danh (khoảng 7 phút) |
-| `cleanup.py` | Xóa dữ liệu giả lập (`--activity` hoặc `--all`) |
+| `moodle311.py` | Thứ tự cột của từng bảng Moodle 3.11 (file CSV của trường không có dòng tiêu đề) |
+| `manifest.py` | Khai báo đợt dữ liệu: file nào nạp vào bảng nào, phạm vi môn CNTT, cột nhạy cảm không nạp, kiểm tra bản ghi mồ côi |
+| `loader.py` | Nạp CSV vào vùng đệm `stg` (mọi cột kiểu chữ, ghi mã băm file), rồi chuyển sang `mdl_*` theo phạm vi |
+| `run.py` | Lệnh `python -m ingest.run --data-dir <thư mục> --batch <tên đợt>`; từ chối ghi vào CSDL `moodle_src` |
 
 ### 9.5 `etl/`: tầng ETL
 
@@ -1209,7 +1197,6 @@ Do_an_chuyen_nganh/
 | `nightly.py` | Job 01:00, chốt số liệu ngày hôm qua |
 | `maintenance.py` | Job Chủ nhật 03:00, dọn dẹp, tối ưu |
 | `backfill.py` | Chạy thủ công, nạp lịch sử lần đầu |
-| `reset_demo.py` | Làm sạch kho phân tích của bộ demo trước khi backfill lại (không chạy được trên dữ liệu thật) |
 
 ### 9.6 `backend/`: tầng API
 
@@ -1354,9 +1341,6 @@ Do_an_chuyen_nganh/
 | File | Tác dụng |
 |---|---|
 | `tests/helpers.js` | Đăng nhập qua API để lấy token nhanh |
-| `tests/admin.spec.js` | Luồng quản trị: drill-down 4 cấp, Nguồn & cách tính, xuất Excel |
-| `tests/teacher.spec.js` | Luồng giảng viên: lọc, cửa sổ chi tiết, luật theo môn, gửi tin, nhắc tự động |
-| `tests/system.spec.js` | Quản lý người dùng, nhật ký ETL, sao lưu, kênh gửi tin, đổi mật khẩu |
 | `tests/authz.spec.js` | Phân quyền: 403 khi xem môn người khác, 401 khi token hết hạn |
 | `tests/a11y.spec.js` | Khả năng tiếp cận WCAG 2.1 A/AA bằng axe-core |
 | `tests/responsive.spec.js` | Kiểm 4 độ rộng 1920 / 1366 / 768 / 390 px |
@@ -1392,17 +1376,13 @@ Do_an_chuyen_nganh/
 | `messaging/test_templates_and_guard.py` | Mẫu tin, điền biến, chốt chặn gửi thật |
 | `database/test_analytics_schema.py` | Schema thật; mỗi test chạy trong transaction rồi rollback |
 | `database/test_migrate_runner.py` | Unit test cho `migrate.py` |
-| `integration/test_etl_pipeline.py` | Đối soát với Moodle, tính nhất quán, idempotency |
-| `mockdata/test_mock_integrity.py` | Tính toàn vẹn dữ liệu giả lập |
 
 ### 9.10 `perf/`, `scripts/`, `docker/`, `docs/`, `SPEC/`
 
 | File | Tác dụng |
 |---|---|
-| `perf/build_x10.py` | Dựng CSDL `lms_analytics_x10`, nhân 10 lần dữ liệu để đo |
 | `perf/explain_queries.py` | `EXPLAIN (ANALYZE, BUFFERS)` các truy vấn chính |
 | `perf/locustfile.py` | Test tải: 50 người dùng đồng thời |
-| `perf/etl_bench.py` | Đo thời gian ETL |
 | `perf/export_bench.py` | Đo xuất Excel 10.000 dòng, PDF 500 dòng |
 | `perf/results/` | Kết quả đã đo, dùng làm minh chứng trong báo cáo |
 | `scripts/lms.ps1` | Lệnh tắt Windows cho mọi thao tác |
@@ -1427,18 +1407,15 @@ Do_an_chuyen_nganh/
 
 | Loại | Lệnh | Điều kiện trước |
 |---|---|---|
-| CSDL, ETL, mock, tích hợp, API, gửi tin, sao lưu | `python -m pytest -q` | Đã chạy `etl-backfill`, `users` |
+| Luật cảnh báo, học kỳ, ETL, mẫu tin, bảo mật, migration (không cần CSDL) | `python -m pytest -q tests/etl tests/messaging tests/backend/test_security_unit.py tests/database/test_migrate_runner.py` | Không |
+| API, ràng buộc CSDL, hàng đợi tin nhắn (ghi tạm dữ liệu thử) | `python -m pytest -q tests/backend tests/database` | Tự chạy trên **bản sao** `lms_analytics_test`, `moodle_src_test`, `moodle_stub_test` (không bao giờ trên CSDL đang dùng). Tạo / làm mới bản sao sau mỗi lần nạp dữ liệu: dừng API, ETL và Moodle mô phỏng rồi chạy `python -m scripts.make_test_db`; chưa có bản sao thì các kiểm thử này được bỏ qua |
 | Frontend (đơn vị) | `cd frontend; npm test` | Không |
 | E2E, phân quyền, responsive, WCAG | `cd frontend; npx playwright test` | API, web và `moodle-stub` đang chạy, đặt `LMS_DEMO_PASSWORD` (tùy chọn `E2E_TEACHER`, `E2E_JWT_SECRET`); dữ liệu thử được dọn tự động sau khi chạy |
 | Kiểm tra nhanh mọi màn hình | `cd frontend; npm run smoke` | API và web đang chạy |
 | Hiệu năng | `.\scripts\lms.ps1 bench` | Xem thêm [perf/README.md](perf/README.md) |
 
-Kết quả đã đo được ghi ở [docs/KET_QUA_KIEM_THU.md](docs/KET_QUA_KIEM_THU.md). Tóm tắt v1.2 (dữ liệu 5 khoa):
-
-- Mọi kiểm thử pytest, vitest và 57 kiểm thử E2E đều đạt.
-- 94 câu SQL của dashboard, chậm nhất 8,9 ms, không Seq Scan trên bảng lớn.
-- 50 người dùng đồng thời: p95 28 ms, p99 50 ms, 0 lỗi.
-- Đối chiếu với "đáp án" khi sinh dữ liệu (12.583 cặp sinh viên-môn): Recall nhóm Nguy cơ cao 99,3%, Precision 86,7%.
+Kết quả đã đo được ghi ở [docs/KET_QUA_KIEM_THU.md](docs/KET_QUA_KIEM_THU.md). Các số đo ở phiên bản 1.2 (hiệu năng,
+đối chiếu với "đáp án") được đo trên dữ liệu mô phỏng 5 khoa trước khi gỡ bỏ, giữ lại làm minh chứng.
 
 ---
 
@@ -1452,7 +1429,7 @@ Kết quả đã đo được ghi ở [docs/KET_QUA_KIEM_THU.md](docs/KET_QUA_KI
 | Đăng nhập báo sai mật khẩu | Chưa chạy `lms.ps1 users`, hoặc mật khẩu đã bị đặt lại | Chạy lại bước 5 của mục 3.3, hoặc dùng `cli set-password` |
 | Đăng nhập báo tài khoản bị khóa | Quản trị viên đã khóa tài khoản | Mở khóa ở Hệ thống > Quản lý người dùng |
 | Trang trắng, không có dữ liệu | Chưa chạy `etl-backfill` | Chạy lại bước 4 của mục 3.3 |
-| Số liệu khác tài liệu | `LMS_AS_OF` sai | Đặt đúng `2026-11-06T10:30:00+07:00` rồi chạy lại từ `seed` |
+| Số liệu khác mục 6 | `LMS_AS_OF` sai hoặc nạp thiếu file | Đặt `2026-11-12T15:00:00+07:00`, chạy lại `ingest` rồi `etl-backfill` |
 | Đổi mật khẩu xong vẫn không vào được | Đổi nhầm CSDL | Bản local (cổng 5173) và Docker (cổng 8080) dùng **hai CSDL riêng** |
 | `npm run dev` báo thiếu module | Chưa `npm install` | `cd frontend; npm install` |
 | Biểu đồ trống nhưng bảng có số | Trình duyệt chặn canvas | Thử trình duyệt khác, hoặc bấm nút "Bảng" |
@@ -1476,7 +1453,7 @@ Kết quả đã đo được ghi ở [docs/KET_QUA_KIEM_THU.md](docs/KET_QUA_KI
 | Chi tiết tầng ETL | [etl/README.md](etl/README.md) |
 | Danh sách endpoint API | [backend/README.md](backend/README.md) hoặc chạy backend rồi mở `http://localhost:8000/api/docs` |
 | Chi tiết tầng giao diện | [frontend/README.md](frontend/README.md) |
-| Cách sinh dữ liệu giả lập | [mockdata/README.md](mockdata/README.md) |
+| Dữ liệu Moodle thật: bảng đã có, bảng thiếu, kế hoạch chuyển đổi | [docs/du_lieu_that/](docs/du_lieu_that/) |
 | Cách đo hiệu năng | [perf/README.md](perf/README.md) |
 
 ---
@@ -1485,5 +1462,5 @@ Kết quả đã đo được ghi ở [docs/KET_QUA_KIEM_THU.md](docs/KET_QUA_KI
 
 Đồ án học tập, không dùng cho mục đích thương mại.
 
-Dữ liệu trong hệ thống là **dữ liệu giả lập** sinh bằng `mockdata/`, không phải dữ liệu sinh viên thật. Họ tên, MSSV, email
-đều do chương trình sinh ngẫu nhiên với seed cố định.
+Hệ thống chạy trên **dữ liệu Moodle thật** của Khoa CNTT do thầy cô cung cấp. Dữ liệu này (CSV, CSDL, ảnh chụp màn
+hình có tên thật, email đã soạn) **không được đưa vào repo**; mọi tài liệu trong repo chỉ ghi số liệu tổng hợp.

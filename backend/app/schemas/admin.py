@@ -31,6 +31,7 @@ class KpisOut(Stamped):
     avg_online_users_today: float
     current_online: int
     current_online_at: datetime | None
+    current_online_source: str | None = None    # SESSIONS = phiên đăng nhập; LOGSTORE = ước tính từ nhật ký
     unique_students: int = 0                   # sinh viên khác nhau (một SV học nhiều môn tính một lần)
     red_rate_prev_week: float | None = None    # tỷ lệ đỏ 7 ngày trước – cho dòng "so với tuần trước"
 
@@ -81,6 +82,8 @@ class CourseEnrollment(BaseModel):
 class FacultySummary(BaseModel):
     faculty_id: int
     faculty_name: str
+    category_id: int | None = None             # có giá trị khi số liệu chỉ tính một bộ môn / chuyên ngành
+    category_name: str | None = None
     course_count: int
     enrolled: int
     unique_students: int
@@ -178,6 +181,9 @@ class HeatCell(BaseModel):
     hour_of_day: int
     avg_requests: float
     avg_online_users: float
+    avg_peak_online: float = 0
+    max_peak_online: int = 0
+    avg_unique_users: float = 0
     peak_share: float
     days: int
 
@@ -186,12 +192,15 @@ class HeatmapOut(Stamped):
     weeks: int
     from_date: date
     to_date: date
+    limited: bool = False                      # nhật ký bắt đầu muộn hơn đầu khoảng: from_date = ngày đầu có dữ liệu
     matrix: list[HeatCell]
 
 
 class FacultyCompareItem(BaseModel):
     faculty_id: int
     faculty_name: str
+    group_id: int | None = None           # đơn vị được so sánh: khoa, hoặc bộ môn / chuyên ngành khi group=department
+    group_name: str | None = None
     course_count: int
     enrolled: int
     unique_students: int
@@ -229,6 +238,7 @@ class SchoolSummary(BaseModel):
 class FacultyCompareOut(Stamped):
     academic_year: str
     semester: int
+    group: str = "faculty"                 # faculty | department
     school: SchoolSummary
     items: list[FacultyCompareItem]
 
@@ -262,3 +272,4 @@ class RiskTrendOut(Stamped):
     week1_start: date
     series: list[TrendPoint]
     rule_changes: list[RuleChange]
+    hidden_before: date | None = None          # không vẽ các ngày trước mốc này (chưa đủ 7 ngày nhật ký)

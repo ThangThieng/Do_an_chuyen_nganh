@@ -62,6 +62,12 @@ class SentMessage:
 
 
 class MoodleClient:
+    """
+    Gọi Moodle Web Service (REST). Một đối tượng giữ MỘT httpx.Client (kết nối keep-alive) suốt vòng đời: tạo client mới
+    cho mỗi lần gọi tốn ~0,4 s trên Windows (dựng lại cấu hình SSL + kết nối TCP) – gửi 100 tin mất thêm ~40 s.
+    Dùng `with MoodleClient(...) as client:` hoặc gọi close() khi xong.
+    """
+
     def __init__(self, settings: MessagingSettings, transport: httpx.BaseTransport | None = None):
         if not settings.moodle_ws_url or not settings.moodle_ws_token:
             raise MoodleError("Chưa cấu hình MOODLE_WS_URL / MOODLE_WS_TOKEN", permanent=True, code="not_configured")
@@ -69,12 +75,28 @@ class MoodleClient:
         self.token = settings.moodle_ws_token
         self.timeout = settings.moodle_ws_timeout
         self.transport = transport
+        self._client: httpx.Client | None = None
+
+    def _http(self) -> httpx.Client:
+        if self._client is None:
+            self._client = httpx.Client(timeout=self.timeout, transport=self.transport)
+        return self._client
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
+    def __enter__(self) -> "MoodleClient":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
 
     def call(self, function: str, params: Mapping | None = None):
         data = {"wstoken": self.token, "wsfunction": function, "moodlewsrestformat": "json", **flatten(params or {})}
         try:
-            with httpx.Client(timeout=self.timeout, transport=self.transport) as client:
-                response = client.post(self.url, data=data)
+            response = self._http().post(self.url, data=data)
         except httpx.TimeoutException as exc:
             raise MoodleError("Moodle không phản hồi (quá thời gian chờ)", permanent=False, code="timeout") from exc
         except httpx.HTTPError as exc:

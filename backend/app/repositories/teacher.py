@@ -88,7 +88,7 @@ STUDENT_SORTS = {
 TIE_BREAKER = "student_code NULLS LAST, user_id"
 STUDENT_LIST_COLUMNS = """user_id, student_code, student_name, email, risk_level, risk_score, risk_reasons,
        score_attendance, score_inactivity, score_assignment,
-       total_sessions, attended_sessions, absent_sessions, absence_rate, attendance_status,
+       total_sessions, attended_sessions, absent_sessions, absence_rate, attendance_status, attendance_source,
        total_assignments, submitted_assignments, missing_assignments_count, late_submissions, completion_rate,
        total_access_count, access_count_7d, access_count_14d, last_access_time, days_since_last_access,
        max_consecutive_missing, rule_set_id"""
@@ -288,3 +288,14 @@ def course_term(conn: Connection, course_id: int, today: date) -> tuple[str, int
                              WHERE course_id = :c AND stat_date <= :today ORDER BY stat_date DESC LIMIT 1""",
                     {"c": course_id, "today": today})
     return (str(row["academic_year"]), int(row["semester"])) if row else None
+
+
+def attendance_from_gradebook(conn: Connection, course_id: int, teacher_id: int, today: date) -> bool:
+    """Chuyên cần của môn lấy từ sổ điểm (không có dữ liệu theo buổi) ở snapshot mới nhất."""
+    return bool(fetch_value(conn, f"""
+        SELECT EXISTS (SELECT 1 FROM analytics.fact_student_risk_summary
+                       WHERE course_id = :course_id AND attendance_source = 'GRADEBOOK' AND {TEACHER_FILTER}
+                         AND snapshot_date = (SELECT MAX(snapshot_date) FROM analytics.fact_student_risk_summary
+                                              WHERE course_id = :course_id AND snapshot_date <= :today))""",
+        {"course_id": course_id, "teacher_id": teacher_id, "today": today}))
+

@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useRiskTrend } from "../api/hooks.js";
 import RiskDoughnut from "../charts/RiskDoughnut.jsx";
 import RiskTrendChart, { trendTableColumns } from "../charts/RiskTrendChart.jsx";
+import { fmtDate } from "../utils/format.js";
 import { ChartCard } from "./common.jsx";
 import MetricInfo from "./MetricInfo.jsx";
 
@@ -33,6 +34,7 @@ export default function RiskOverviewPanel({ title, summary, loading, trend, cour
         <ChartCard title="Xu hướng mức rủi ro theo thời gian" info={{ keys: ["risk_trend", "risk_level"], courseId, note: ruleNote }}
           extra={<Segmented size="small" value={granularity} onChange={setGranularity}
             options={[{ label: "Theo tuần", value: "week" }, { label: "Theo ngày", value: "day" }]} />}
+          subtitle={query.data?.hidden_before ? `Bắt đầu từ ${fmtDate(query.data.hidden_before)}: tuần đầu tiên có nhật ký chưa đủ dữ liệu để đánh giá mức tương tác` : undefined}
           loading={query.isLoading} error={query.error} fetching={query.isFetching} height={250}
           table={{ rowKey: "period", dataSource: query.data?.series ?? [], columns: trendTableColumns }}>
           {query.data && <RiskTrendChart series={query.data.series} ruleChanges={query.data.rule_changes}

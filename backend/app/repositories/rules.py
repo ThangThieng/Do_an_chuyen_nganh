@@ -23,7 +23,7 @@ from etl.transform.risk_rules import score_student
 LEVELS = ("RED", "YELLOW", "GREEN")
 SCORE_INPUTS = """user_id, student_code, student_name, total_sessions, absent_sessions, days_since_last_access,
        access_count_14d, total_assignments, missing_assignments_count, max_consecutive_missing, attendance_detail,
-       risk_level, risk_score, risk_reasons, rule_set_id"""
+       attendance_source, risk_level, risk_score, risk_reasons, rule_set_id"""
 
 
 def _json(value):
@@ -59,11 +59,15 @@ def history(conn: Connection, course_id: int) -> list[dict]:
 
 
 def attendance_activities(conn: Connection, course_id: int, snapshot_date: date) -> list[dict]:
-    """Các hoạt động điểm danh của môn (từ attendance_detail của snapshot) – để chọn trong luật “vắng n buổi …”."""
+    """
+    Các hoạt động điểm danh CÓ SỐ BUỔI của môn (từ attendance_detail của snapshot) – để chọn trong luật “vắng n buổi …”.
+    Mục điểm danh lấy từ sổ điểm (source = GRADEBOOK) chỉ có tỷ lệ, không có số buổi nên không liệt kê.
+    """
     return fetch_all(conn, """
         SELECT (d->>'attendance_id')::int AS attendance_id, d->>'name' AS name, MAX((d->>'sessions')::int) AS sessions
         FROM analytics.fact_student_risk_summary r, jsonb_array_elements(r.attendance_detail) d
         WHERE r.course_id = :course_id AND r.snapshot_date = :snapshot_date
+          AND COALESCE(d->>'source', 'SESSIONS') <> 'GRADEBOOK'
         GROUP BY 1, 2 ORDER BY 1""", {"course_id": course_id, "snapshot_date": snapshot_date})
 
 

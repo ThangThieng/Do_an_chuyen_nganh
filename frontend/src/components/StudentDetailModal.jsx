@@ -10,7 +10,7 @@ import { useAdminStudentCompare, useAdminStudentDetail, useCreateIntervention, u
   useStudentDetail } from "../api/hooks.js";
 import { StudentCompareChart, WeeklyActivityChart } from "../charts/StudentCharts.jsx";
 import { ACTIONS, RISK } from "../theme/tokens.js";
-import { fmtDate, fmtDateTime, fmtDaysSince, fmtShortDate, riskTransitions } from "../utils/format.js";
+import { absenceCountText, fmtDate, fmtDateTime, fmtDaysSince, fmtShortDate, isGradebookAttendance, riskTransitions } from "../utils/format.js";
 import MessageComposer from "./MessageComposer.jsx";
 import MetricInfo from "./MetricInfo.jsx";
 import ScoreBreakdown from "./ScoreBreakdown.jsx";
@@ -73,7 +73,11 @@ export default function StudentDetailModal({ courseId, userId, onClose, readOnly
     <Space wrap size={[8, 4]}>
       <RiskBadge level={s.risk_level} />
       <span>{s.student_name}</span>
-      <span className="muted" style={{ fontWeight: 400 }}>{s.student_code} · {s.email ?? "không có email"}</span>
+      <span className="muted" style={{ fontWeight: 400 }}>
+        <Tooltip title="MSSV lấy từ mã số (idnumber) trong Moodle; Moodle để trống thì suy từ cụm 7 chữ số trong tên đăng nhập">
+          <span>{s.student_code || "chưa rõ MSSV"}</span>
+        </Tooltip> · {s.email ?? "không có email"}
+      </span>
       <Tooltip title="Xem bảng phân tích điểm bên dưới"><Tag>Điểm rủi ro {s.risk_score}</Tag></Tooltip>
     </Space>
   ) : "Chi tiết sinh viên";
@@ -102,10 +106,10 @@ export default function StudentDetailModal({ courseId, userId, onClose, readOnly
             message={s.risk_reasons.length ? <>Lý do: {s.risk_reasons.join("; ")}</> : "Không có dấu hiệu bất thường"}
             description={(
               <Space wrap size={[16, 4]} className="muted" style={{ fontSize: 12 }}>
-                <span>Vắng: <Rate value={s.absence_rate} /> ({s.absent_sessions}/{s.total_sessions} buổi)</span>
+                <span>Vắng: <Rate value={s.absence_rate} /> ({absenceCountText(s, " buổi")})</span>
                 <span>Bài tập: đã nộp {s.submitted_assignments}/{s.total_assignments} (trễ {s.late_submissions})</span>
-                <span>Truy cập cuối: {fmtDaysSince(s.days_since_last_access)}</span>
-                <span>Hoàn thành hoạt động: <Rate value={s.completion_rate} /></span>
+                <span title="Lần muộn nhất trong nhật ký, nộp bài hoặc làm bài kiểm tra">Hoạt động cuối: {fmtDaysSince(s.days_since_last_access)}</span>
+                {s.completion_rate != null && <span>Hoàn thành hoạt động: <Rate value={s.completion_rate} /></span>}
                 <span>Snapshot {fmtDate(s.snapshot_date)}</span>
               </Space>
             )}
@@ -119,7 +123,7 @@ export default function StudentDetailModal({ courseId, userId, onClose, readOnly
           {rule.data ? <ScoreBreakdown s={s} rule={rule.data} /> : <Skeleton active paragraph={{ rows: 3 }} />}
           {s.attendance_detail?.length > 1 && (
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Theo hoạt động điểm danh: {s.attendance_detail.map((a) => `${a.name} vắng ${a.absent}/${a.sessions}`).join(" · ")}
+              Theo hoạt động điểm danh: {s.attendance_detail.map((a) => (isGradebookAttendance(a) ? `${a.name} vắng ${a.absent}%` : `${a.name} vắng ${a.absent}/${a.sessions}`)).join(" · ")}
               {s.max_consecutive_missing > 0 && ` · bỏ nộp liên tiếp tối đa ${s.max_consecutive_missing} bài`}
             </div>
           )}
@@ -131,11 +135,11 @@ export default function StudentDetailModal({ courseId, userId, onClose, readOnly
             </Col>
             <Col xs={24} md={13}>
               <b>Hoạt động {s.weekly_activity.length} tuần</b>
-              <WeeklyActivityChart weeks={s.weekly_activity} />
+              <WeeklyActivityChart weeks={s.weekly_activity} gradebook={isGradebookAttendance(s)} />
             </Col>
           </Row>
 
-          <Divider orientation="left" plain>Bài tập</Divider>
+          <Divider orientation="left" plain>Bài tập và bài kiểm tra</Divider>
           {s.assignment_detail.length ? (
             <Space wrap size={[6, 6]}>
               {s.assignment_detail.map((a) => {
@@ -143,7 +147,7 @@ export default function StudentDetailModal({ courseId, userId, onClose, readOnly
                 return (
                   <Tooltip key={a.assign_id ?? a.name} title={`Hạn ${fmtDateTime(a.duedate)}${a.submitted_at ? ` · nộp ${fmtDateTime(a.submitted_at)}` : ""}`}>
                     <Tag style={state.tone ? { color: state.tone.ink, background: state.tone.tint, borderColor: state.tone.color } : undefined}>
-                      {a.name} – {state.text}
+                      {a.name}{a.kind === "quiz" ? " (trắc nghiệm)" : ""} – {state.text}
                     </Tag>
                   </Tooltip>
                 );

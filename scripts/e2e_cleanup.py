@@ -4,6 +4,7 @@ Xóa dữ liệu do bộ E2E tạo trong CSDL đang cấu hình:
   - tin gửi đi có tiêu đề bắt đầu bằng "[e2e]" (và nhật ký can thiệp gắn với tin);
   - tin nhắn Moodle tương ứng do máy chủ Moodle mô phỏng ghi vào mdl_messages.
 """
+import os
 import sys
 from pathlib import Path
 
@@ -54,8 +55,15 @@ with psycopg.connect(**load_db_config("ANALYTICS_DB").conninfo(application_name=
                               AND NOT EXISTS (SELECT 1 FROM analytics.fact_course_progress_daily f WHERE f.rule_set_id = r.rule_set_id)""",
                          (MARK,)).rowcount
 
-with psycopg.connect(**load_db_config("MOODLE_DB").conninfo(application_name="lms-e2e-cleanup")) as conn:
-    moodle = conn.execute("DELETE FROM mdl_messages WHERE fullmessage LIKE %s OR subject LIKE %s", (MARK, MARK)).rowcount
+# Tin nhắn Moodle mô phỏng nằm trong CSDL ghi riêng của máy chủ mô phỏng (không phải CSDL dữ liệu thật)
+_cfg = load_db_config("MOODLE_DB")
+_stub = os.getenv("MOODLE_STUB_DB_NAME") or "moodle_stub"
+moodle = 0
+with psycopg.connect(**_cfg.conninfo(dbname=_cfg.maintenance_db, application_name="lms-e2e-cleanup")) as _admin:
+    _exists = _admin.execute("SELECT 1 FROM pg_database WHERE datname = %s", (_stub,)).fetchone() is not None
+if _exists:
+    with psycopg.connect(**_cfg.conninfo(dbname=_stub, application_name="lms-e2e-cleanup")) as conn:
+        moodle = conn.execute("DELETE FROM mdl_messages WHERE fullmessage LIKE %s OR subject LIKE %s", (MARK, MARK)).rowcount
 
 print(f"[e2e] Đã xóa {notes + linked} can thiệp, {messages} tin gửi đi, {moodle} tin nhắn Moodle, "
       f"{prompts} quy tắc nhắc, {rules} bộ luật thử do E2E tạo; khôi phục luật mặc định cho {restored} môn.")

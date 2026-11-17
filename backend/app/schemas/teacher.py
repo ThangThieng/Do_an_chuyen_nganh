@@ -70,6 +70,7 @@ class RiskStudent(BaseModel):
     absent_sessions: int
     absence_rate: float | None                 # None = chưa có buổi điểm danh
     attendance_status: str
+    attendance_source: str = "SESSIONS"         # GRADEBOOK = tỷ lệ quy đổi từ sổ điểm (thang 100), không phải số buổi
     total_assignments: int
     submitted_assignments: int
     missing_assignments_count: int
@@ -97,11 +98,13 @@ class WeekActivity(BaseModel):
     sessions: int = 0
     present: int = 0
     attended: bool | None = None
+    no_log: bool = False                       # tuần nằm trước ngày đầu của nhật ký: không có số liệu, không phải 0
 
 
 class AssignmentItem(BaseModel):
     assign_id: int | None = None
     name: str
+    kind: str = "assign"            # assign = bài tập; quiz = bài kiểm tra trắc nghiệm (assign_id âm = -quiz.id)
     duedate: datetime | None = None
     status: str
     submitted_at: datetime | None = None
@@ -183,7 +186,8 @@ class ProgressPoint(BaseModel):
 class SectionProgress(BaseModel):
     section: int
     name: str
-    completion_rate: float
+    completion_rate: float | None = None    # % hoàn thành hoạt động của chương (môn có theo dõi hoàn thành)
+    access_rate: float | None = None        # % SV đã mở ít nhất một nội dung của chương (khi không có dữ liệu hoàn thành)
 
 
 class ProgressSummary(BaseModel):
@@ -207,6 +211,9 @@ class ProgressOut(Stamped):
     summary: ProgressSummary
     series: list[ProgressPoint]
     sections: list[SectionProgress]
+    # Chuyên cần lấy từ sổ điểm: chỉ có giá trị hiện tại (sổ điểm không lưu lịch sử) -> không vẽ theo thời gian
+    attendance_from_gradebook: bool = False
+    hidden_before: date | None = None          # không vẽ ngày / tuần kết thúc trước mốc này (chưa đủ 7 ngày nhật ký)
 
 
 class CompareMetric(BaseModel):

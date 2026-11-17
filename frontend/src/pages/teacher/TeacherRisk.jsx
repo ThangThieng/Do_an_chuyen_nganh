@@ -83,6 +83,7 @@ export default function TeacherRisk() {
               <ChartCard title="Diễn biến mức rủi ro theo tuần" info={{ keys: ["risk_trend", "risk_level"], courseId }}
                 extra={<Segmented size="small" value={granularity} onChange={setGranularity}
                   options={[{ label: "Theo tuần", value: "week" }, { label: "Theo ngày", value: "day" }]} />}
+                subtitle={trend.data?.hidden_before ? `Bắt đầu từ ${fmtDate(trend.data.hidden_before)}: tuần đầu tiên có nhật ký chưa đủ dữ liệu để đánh giá mức tương tác` : undefined}
                 loading={trend.isLoading} error={trend.error} fetching={trend.isFetching} height={240}
                 table={{ rowKey: "period", dataSource: trend.data?.series ?? [], columns: trendTableColumns }}>
                 {trend.data && <RiskTrendChart series={trend.data.series} ruleChanges={trend.data.rule_changes}

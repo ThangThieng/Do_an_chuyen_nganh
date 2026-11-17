@@ -170,7 +170,7 @@ export default function TeacherRules() {
                   two: <>từ <Pct value={t.absence_red} onChange={setT("absence_red")} label={THRESHOLD_LABEL.absence_red} disabled={!canEdit} /></>, w: "attendance" },
                 { k: "c2", name: "Không tương tác",
                   one: <>quá <Days value={t.inactive_yellow_days} onChange={setT("inactive_yellow_days")} label={THRESHOLD_LABEL.inactive_yellow_days} disabled={!canEdit} /> chưa vào, hoặc truy cập 14 ngày dưới <Pct value={t.low_access_ratio} onChange={setT("low_access_ratio")} label={THRESHOLD_LABEL.low_access_ratio} disabled={!canEdit} /> trung vị lớp</>,
-                  two: <>quá <Days value={t.inactive_red_days} onChange={setT("inactive_red_days")} label={THRESHOLD_LABEL.inactive_red_days} disabled={!canEdit} /> hoặc chưa từng vào</>, w: "inactivity" },
+                  two: <>quá <Days value={t.inactive_red_days} onChange={setT("inactive_red_days")} label={THRESHOLD_LABEL.inactive_red_days} disabled={!canEdit} /> hoặc không có hoạt động nào</>, w: "inactivity" },
                 { k: "c3", name: "Thiếu bài tập", one: <>thiếu từ <Pct value={t.missing_yellow} onChange={setT("missing_yellow")} label={THRESHOLD_LABEL.missing_yellow} disabled={!canEdit} /> số bài đã tới hạn</>,
                   two: <>từ <Pct value={t.missing_red} onChange={setT("missing_red")} label={THRESHOLD_LABEL.missing_red} disabled={!canEdit} /></>, w: "assignment" },
               ]}
@@ -208,12 +208,19 @@ export default function TeacherRules() {
                       const next = data.bounds.extra_rule_types[type];
                       edit((p) => { p.extra_rules[i] = { type, level: p.extra_rules[i].level, [next.field]: next.min }; return p; });
                     }}
-                    options={Object.keys(data.bounds.extra_rule_types).map((k) => ({ value: k, label: EXTRA_LABEL[k] }))} />
+                    options={Object.keys(data.bounds.extra_rule_types).map((k) => (
+                      k === "absent_sessions" && !activities.length
+                        // Môn không có điểm danh theo buổi (chỉ có tỷ lệ trong sổ điểm hoặc không có điểm danh): luật không bao giờ khớp
+                        ? { value: k, label: `${EXTRA_LABEL[k]} (môn không có số buổi)`, disabled: true }
+                        : { value: k, label: EXTRA_LABEL[k] }))} />
                   <span>từ</span>
                   <InputNumber size="small" min={spec.min} max={spec.max} value={r[spec.field]} disabled={!canEdit}
                     onChange={(v) => setR({ [spec.field]: v ?? spec.min })} suffix={EXTRA_UNIT[r.type]} style={{ width: 110 }}
                     aria-label={`Giá trị luật bổ sung ${i + 1}`} />
-                  {r.type === "absent_sessions" && (
+                  {r.type === "absent_sessions" && !activities.length && (
+                    <span className="muted" style={{ fontSize: 12 }}>Môn không có số buổi điểm danh nên luật này không có tác dụng; dùng “Tỷ lệ vắng”.</span>
+                  )}
+                  {r.type === "absent_sessions" && activities.length > 0 && (
                     <Select size="small" style={{ width: 220 }} disabled={!canEdit} aria-label="Hoạt động điểm danh"
                       value={r.attendance_id ?? (r.attendance_name ? `name:${r.attendance_name}` : "all")}
                       onChange={(v) => setR(v === "all" ? { attendance_id: undefined, attendance_name: undefined }

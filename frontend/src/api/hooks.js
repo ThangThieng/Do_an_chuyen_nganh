@@ -28,9 +28,10 @@ export const useEnrollmentByFaculty = (term) => useQuery({
   enabled: !!term, placeholderData: keepPreviousData,
 });
 
-export const useFacultyCourses = (facultyId, term, sort = "active_rate", order = "desc") => useQuery({
-  queryKey: ["faculty-courses", facultyId, term, sort, order],
-  queryFn: () => get(`/admin/enrollment/faculties/${facultyId}/courses`, { ...termParams(term), sort, order }),
+export const useFacultyCourses = (facultyId, term, sort = "active_rate", order = "desc", categoryId) => useQuery({
+  queryKey: ["faculty-courses", facultyId, term, sort, order, categoryId],
+  queryFn: () => get(`/admin/enrollment/faculties/${facultyId}/courses`,
+    { ...termParams(term), sort, order, category_id: categoryId }),
   enabled: !!facultyId && !!term, placeholderData: keepPreviousData,
 });
 
@@ -187,18 +188,19 @@ export const useChannelModes = () => useQuery({
 });
 
 // ----------------------------------------------------------------------------- v1.2 – so sánh & xu hướng (góp ý 1, 2)
-export const useFacultyCompare = (term) => useQuery({
-  queryKey: ["compare-faculties", term],
-  queryFn: () => get("/admin/compare/faculties", termParams(term)),
-  enabled: !!term, placeholderData: keepPreviousData,
+export const useFacultyCompare = (term, group = "faculty", enabled = true) => useQuery({
+  queryKey: ["compare-faculties", term, group],
+  queryFn: () => get("/admin/compare/faculties", { ...termParams(term), group }),
+  enabled: !!term && enabled, placeholderData: keepPreviousData,
 });
 
 /** scope: {facultyId?, courseId?} cho Admin; teacherCourseId cho giảng viên. */
-export const useRiskTrend = ({ term, facultyId, courseId, teacherCourseId, granularity = "week" }) => useQuery({
-  queryKey: ["risk-trend", term, facultyId, courseId, teacherCourseId, granularity],
+export const useRiskTrend = ({ term, facultyId, categoryId, courseId, teacherCourseId, granularity = "week" }) => useQuery({
+  queryKey: ["risk-trend", term, facultyId, categoryId, courseId, teacherCourseId, granularity],
   queryFn: () => (teacherCourseId
     ? get(`/teacher/courses/${teacherCourseId}/risk-trend`, { granularity })
-    : get("/admin/risk-trend", { ...termParams(term), faculty_id: facultyId, course_id: courseId, granularity })),
+    : get("/admin/risk-trend", { ...termParams(term), faculty_id: facultyId, category_id: categoryId,
+      course_id: courseId, granularity })),
   enabled: !!teacherCourseId || !!term, placeholderData: keepPreviousData,
 });
 

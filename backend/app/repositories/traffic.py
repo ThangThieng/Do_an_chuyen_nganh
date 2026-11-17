@@ -52,16 +52,26 @@ def realtime(conn: Connection, now: datetime) -> dict:
 
 @cached
 def heatmap(conn: Connection, weeks: int, today: date) -> dict:
-    """Trung bình theo (thứ, giờ) của `weeks` tuần TRỌN NGÀY gần nhất – không tính hôm nay đang dở dang."""
-    from_date = today - timedelta(days=7 * weeks)
+    """
+    Trung bình theo (thứ, giờ) của `weeks` tuần TRỌN NGÀY gần nhất – không tính hôm nay đang dở dang.
+    Nhật ký bắt đầu muộn hơn đầu khoảng (dữ liệu thật: 13/09/2026) thì from_date lùi về ngày đầu có dữ liệu và
+    limited = True, để tiêu đề không ghi "12 tuần" khi thực tế chỉ có ~8 tuần.
+    """
+    requested_from = today - timedelta(days=7 * weeks)
+    first_day = fetch_value(conn, "SELECT MIN(stat_date) FROM analytics.fact_server_traffic_hourly WHERE total_requests > 0")
+    from_date = max(requested_from, first_day) if first_day else requested_from
     matrix = fetch_all(conn, """
         SELECT day_of_week, hour_of_day,
                ROUND(AVG(total_requests), 1)   AS avg_requests,
                ROUND(AVG(avg_online_users), 1) AS avg_online_users,
+               ROUND(AVG(peak_online_users), 1) AS avg_peak_online,     -- đỉnh online trong giờ, trung bình các ngày
+               MAX(peak_online_users)           AS max_peak_online,
+               ROUND(AVG(unique_users), 1)     AS avg_unique_users,      -- số người khác nhau có hoạt động trong giờ
                ROUND(100.0 * AVG(is_peak_hour::int), 1) AS peak_share,
                COUNT(*)                        AS days
         FROM analytics.fact_server_traffic_hourly
         WHERE stat_date >= :from_date AND stat_date < :today
         GROUP BY day_of_week, hour_of_day
         ORDER BY day_of_week, hour_of_day""", {"from_date": from_date, "today": today})
-    return dict(weeks=weeks, from_date=from_date, to_date=today - timedelta(days=1), matrix=matrix)
+    return dict(weeks=weeks, from_date=from_date, to_date=today - timedelta(days=1), matrix=matrix,
+                limited=from_date > requested_from)

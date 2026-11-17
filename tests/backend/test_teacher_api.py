@@ -1,6 +1,7 @@
 """API Giảng viên 2.1, 2.2 – phân quyền theo môn, bảng cảnh báo, Modal, can thiệp, tiến độ, so sánh, export."""
 from __future__ import annotations
 
+from datetime import date
 from io import BytesIO
 
 import pytest
@@ -64,7 +65,9 @@ def test_students_filters(client, teacher_headers, course):
     assert red_yellow["total"] == course["red_count"] + course["yellow_count"]
 
     absent = client.get(url, params={"criterion": "attendance", "page_size": 200}, headers=teacher_headers).json()
-    assert absent["total"] > 0 and all(s["score_attendance"] > 0 for s in absent["items"])
+    assert all(s["score_attendance"] > 0 for s in absent["items"])
+    if course["attendance_rate"] is None:                 # môn không có dữ liệu chuyên cần: không ai bị tính C1
+        assert absent["total"] == 0
 
     name = red["items"][0]["student_name"]
     found = client.get(url, params={"search": name.split()[-1].lower()}, headers=teacher_headers).json()
@@ -114,21 +117,26 @@ def test_create_intervention(client, teacher_headers, other_teacher_headers, cou
 
 
 def test_progress_daily_and_weekly(client, teacher_headers, course, db, snapshot):
-    days = db.execute("SELECT COUNT(*) FROM analytics.fact_course_progress_daily WHERE course_id = %s",
-                      (course["course_id"],)).fetchone()[0]
     daily = client.get(base(course) + "/progress", headers=teacher_headers).json()
-    assert len(daily["series"]) == days
+    hidden = daily["hidden_before"] or "1900-01-01"          # bỏ các ngày chưa đủ 7 ngày nhật ký
+    days = db.execute("SELECT COUNT(*) FROM analytics.fact_course_progress_daily WHERE course_id = %s AND stat_date >= %s",
+                      (course["course_id"], hidden)).fetchone()[0]
+    assert len(daily["series"]) == days and all(p["period_end"] >= hidden for p in daily["series"])
     assert daily["summary"]["stat_date"] == snapshot.isoformat() == daily["series"][-1]["period_end"]
     assert daily["summary"]["submission_rate"] == pytest.approx(float(course["assignment_submission_rate"]))
-    assert daily["sections"] and all(0 <= s["completion_rate"] <= 100 for s in daily["sections"])
+    # Có dữ liệu hoàn thành thì % hoàn thành theo chương; không có thì % SV đã mở nội dung (access_rate)
+    assert daily["sections"] and all(0 <= (s["completion_rate"] if s["completion_rate"] is not None else s["access_rate"]) <= 100
+                                     for s in daily["sections"])
 
     weekly = client.get(base(course) + "/progress", params={"granularity": "week"}, headers=teacher_headers).json()
     periods = [p["period"] for p in weekly["series"]]
-    assert len(periods) == len(set(periods)) == 9                     # 07/09 – 06/11/2026 = 9 tuần ISO
+    iso_weeks = {date.fromisoformat(d["period_end"]).isocalendar()[:2] for d in daily["series"]}
+    assert len(periods) == len(set(periods)) == len(iso_weeks)        # mỗi tuần ISO có số liệu đúng một điểm
     by_day = {p["period_end"]: p for p in daily["series"]}
     for week in weekly["series"]:
         assert week["active_students_7d"] == by_day[week["period_end"]]["active_students_7d"]
-    assert sum(w["total_views_day"] for w in weekly["series"]) == sum(d["total_views_day"] for d in daily["series"])
+    if not daily["hidden_before"]:                           # tuần đầu được giữ trọn tuần nên chỉ so tổng khi không ẩn
+        assert sum(w["total_views_day"] for w in weekly["series"]) == sum(d["total_views_day"] for d in daily["series"])
     assert client.get(base(course) + "/progress", params={"granularity": "month"}, headers=teacher_headers).status_code == 422
 
 
@@ -139,7 +147,10 @@ def test_compare(client, teacher_headers, course):
     assert set(metrics) == {"access_14d", "total_access", "submission_rate", "attendance_rate", "completion_rate"}
     assert metrics["access_14d"]["student"] == student["access_count_14d"]
     assert metrics["submission_rate"]["class_avg"] == pytest.approx(float(course["assignment_submission_rate"]))
-    assert metrics["attendance_rate"]["class_avg"] == pytest.approx(float(course["attendance_rate"]))
+    if course["attendance_rate"] is None:
+        assert metrics["attendance_rate"]["class_avg"] is None
+    else:
+        assert metrics["attendance_rate"]["class_avg"] == pytest.approx(float(course["attendance_rate"]))
     if student["total_assignments"]:
         expected = 100 * student["submitted_assignments"] / student["total_assignments"]
         assert metrics["submission_rate"]["student"] == pytest.approx(expected, abs=0.01)

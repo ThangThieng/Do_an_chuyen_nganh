@@ -3,8 +3,10 @@ import { Card, Col, DatePicker, Row, Select, Table } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { useFilters, useTrafficHeatmap, useTrafficHourly, useTrafficRealtime } from "../../api/hooks.js";
-import TrafficDualAxisChart, { PeakLegend, trafficTableColumns } from "../../charts/TrafficDualAxisChart.jsx";
-import TrafficHeatmap, { heatmapTableColumns } from "../../charts/TrafficHeatmap.jsx";
+import TrafficDualAxisChart, { PeakLegend, trafficColumnsFor } from "../../charts/TrafficDualAxisChart.jsx";
+import TrafficHeatmap, {
+  HEATMAP_SCOPE_NOTE, OperationHints, heatmapRange, heatmapTableColumns,
+} from "../../charts/TrafficHeatmap.jsx";
 import { ChartCard, KpiCard } from "../../components/common.jsx";
 import { fmtDateTime, fmtDecimal, fmtHour, fmtInt } from "../../utils/format.js";
 
@@ -29,10 +31,11 @@ export default function AdminTraffic() {
 
   const stats = useMemo(() => {
     if (!items?.length) return null;
-    const peak = items.reduce((best, i) => (i.total_requests > best.total_requests ? i : best), items[0]);
+    // "Đông nhất" theo số người online cùng lúc (tải thực tế lên hệ thống), cùng số thì xét lượt hoạt động
+    const busier = (a, b) => b.peak_online_users - a.peak_online_users || b.total_requests - a.total_requests;
     const total = items.reduce((s, i) => s + i.total_requests, 0);
-    return { peak, total, avgOnline: items.reduce((s, i) => s + Number(i.avg_online_users), 0) / items.length,
-      top: [...items].sort((a, b) => b.total_requests - a.total_requests).slice(0, 10) };
+    const top = [...items].sort(busier).slice(0, 10);
+    return { peak: top[0], total, avgOnline: items.reduce((s, i) => s + Number(i.avg_online_users), 0) / items.length, top };
   }, [items]);
 
   const presets = asOf ? [
@@ -59,57 +62,65 @@ export default function AdminTraffic() {
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} xl={6}>
           <KpiCard label="Online hiện tại" loading={!rt} value={fmtInt(rt?.current_online)}
-            hint={rt?.current_online_at ? `lúc ${fmtHour(rt.current_online_at)}` : "Chưa có mẫu"}
+            hint={rt?.current_online_at ? `lúc ${fmtHour(rt.current_online_at)}${rt.current_online_source === "LOGSTORE" ? " · ước tính từ nhật ký" : ""}` : "Chưa có mẫu"}
             detail="Số người dùng có hoạt động trong 5 phút gần nhất; tự làm mới mỗi 60 giây" />
         </Col>
         <Col xs={24} sm={12} xl={6}>
-          <KpiCard label="Requests hôm nay" loading={!rt} value={fmtInt(rt?.requests_so_far)} hint={rt ? `giờ này ${fmtInt(rt.requests_current_hour)}` : undefined}
-            detail={rt ? `Tính từ 00:00 tới hiện tại; riêng giờ ${fmtHour(rt.current_hour)} có ${fmtInt(rt.requests_current_hour)} requests` : undefined} />
+          <KpiCard label="Lượt hoạt động hôm nay" loading={!rt} value={fmtInt(rt?.requests_so_far)} hint={rt ? `giờ này ${fmtInt(rt.requests_current_hour)}` : undefined}
+            detail={rt ? `Số sự kiện trong nhật ký Moodle từ 00:00 tới hiện tại; riêng giờ ${fmtHour(rt.current_hour)} có ${fmtInt(rt.requests_current_hour)} lượt` : undefined} />
         </Col>
         <Col xs={24} sm={12} xl={6}>
-          <KpiCard label="Giờ đông nhất trong khoảng" loading={!stats && hourly.isLoading}
-            value={stats ? `${fmtInt(stats.peak.total_requests)} req` : "–"} hint={stats ? `lúc ${fmtDateTime(stats.peak.stat_hour)}` : undefined} />
+          <KpiCard label="Giờ đông người nhất trong khoảng" loading={!stats && hourly.isLoading}
+            value={stats ? `${fmtInt(stats.peak.peak_online_users)} người online` : "–"}
+            hint={stats ? `lúc ${fmtDateTime(stats.peak.stat_hour)} · ${fmtInt(stats.peak.total_requests)} lượt hoạt động` : undefined} />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <KpiCard label="Online trung bình trong khoảng" loading={!stats && hourly.isLoading}
-            value={stats ? fmtDecimal(stats.avgOnline, 1) : "–"} hint={stats ? `Tổng ${fmtInt(stats.total)} requests` : undefined} />
+            value={stats ? fmtDecimal(stats.avgOnline, 1) : "–"} hint={stats ? `Tổng ${fmtInt(stats.total)} lượt hoạt động` : undefined} />
         </Col>
 
         <Col span={24}>
           <ChartCard
             title="Lưu lượng truy cập theo giờ"
-            subtitle={<>Requests là số sự kiện ghi trong logstore (chỉ số gần đúng của HTTP request) <PeakLegend inline /></>}
+            subtitle={<>Lượt hoạt động = số sự kiện trong nhật ký Moodle (các môn học), không phải số lượt tải trang <PeakLegend inline /></>}
             loading={hourly.isLoading} error={hourly.error} fetching={hourly.isFetching} height={360}
-            table={{ rowKey: "stat_hour", dataSource: items ?? [], columns: trafficTableColumns }}
+            table={{ rowKey: "stat_hour", dataSource: items ?? [], columns: trafficColumnsFor(items) }}
           >
             {items && <TrafficDualAxisChart items={items} labelFormat={days <= 1 ? "HH:mm" : "DD/MM HH:mm"} />}
           </ChartCard>
         </Col>
 
         <Col xs={24} xl={9}>
-          <Card title="Top 10 giờ đông nhất" style={{ height: "100%" }}>
+          <Card title="Top 10 giờ đông người nhất" style={{ height: "100%" }}>
             <Table
               size="small" rowKey="stat_hour" pagination={false} dataSource={stats?.top ?? []} loading={hourly.isLoading}
               columns={[
                 { title: "#", render: (_, __, i) => i + 1, width: 40 },
                 { title: "Giờ", dataIndex: "stat_hour", render: fmtDateTime },
-                { title: "Requests", dataIndex: "total_requests", align: "right", render: fmtInt },
                 { title: "Online cao nhất", dataIndex: "peak_online_users", align: "right", render: fmtInt },
+                { title: "Lượt hoạt động", dataIndex: "total_requests", align: "right", render: fmtInt },
               ]}
             />
           </Card>
         </Col>
         <Col xs={24} xl={15}>
           <ChartCard
-            title="Heatmap giờ × thứ"
+            title="Giờ đông / giờ vắng"
+            subtitle={heatmapRange(heatmap.data, dayjs)}
             extra={(
-              <Select size="small" value={weeks} onChange={setWeeks} aria-label="Số tuần" style={{ width: 120 }}
+              <Select size="small" value={weeks} onChange={setWeeks} aria-label="Số tuần" style={{ width: 110 }}
                 options={[1, 2, 4, 8, 12].map((w) => ({ value: w, label: `${w} tuần` }))} />
             )}
             loading={heatmap.isLoading} error={heatmap.error} fetching={heatmap.isFetching} bare
             table={{ rowKey: (r) => `${r.day_of_week}-${r.hour_of_day}`, dataSource: heatmap.data?.matrix ?? [], columns: heatmapTableColumns }}
           >
-            {heatmap.data && <TrafficHeatmap matrix={heatmap.data.matrix} />}
+            {heatmap.data && (
+              <>
+                <TrafficHeatmap matrix={heatmap.data.matrix} metric="online" />
+                <OperationHints matrix={heatmap.data.matrix} />
+                <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{HEATMAP_SCOPE_NOTE}</div>
+              </>
+            )}
           </ChartCard>
         </Col>
       </Row>

@@ -10,6 +10,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
+from common import attendance_text
+
 PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
 LEVEL_LABELS = {"RED": "Nguy cơ cao", "YELLOW": "Cần lưu ý", "GREEN": "An toàn"}
 
@@ -17,7 +19,8 @@ LEVEL_LABELS = {"RED": "Nguy cơ cao", "YELLOW": "Cần lưu ý", "GREEN": "An t
 VARIABLES: dict[str, str] = {
     "ten_sv": "Tên sinh viên", "ho_ten_sv": "Họ tên sinh viên", "mssv": "Mã số sinh viên",
     "ma_mon": "Mã môn", "ten_mon": "Tên môn", "ten_gv": "Tên giảng viên", "email_gv": "Email giảng viên",
-    "xung_ho": "Thầy/Cô", "so_buoi_vang": "Số buổi vắng", "tong_buoi": "Số buổi đã điểm danh",
+    "xung_ho": "Thầy/Cô", "chuyen_can": "Chuyên cần (dùng được cho mọi môn)",
+    "so_buoi_vang": "Số buổi vắng (chỉ môn điểm danh theo buổi)", "tong_buoi": "Số buổi đã điểm danh (chỉ môn điểm danh theo buổi)",
     "ty_le_vang": "Tỷ lệ vắng", "so_ngay_khong_vao": "Số ngày chưa vào môn", "bai_chua_nop": "Bài chưa nộp (tên, hạn)",
     "so_bai_thieu": "Số bài thiếu", "muc_rui_ro": "Mức rủi ro", "ly_do": "Lý do cảnh báo",
     "tinh_hinh": "Các câu mô tả tình hình theo từng tiêu chí", "han_lien_he": "Hạn liên hệ",
@@ -64,12 +67,11 @@ def _missing_assignments(student: Mapping) -> list[str]:
 def situation_lines(student: Mapping) -> list[str]:
     """Các câu mô tả tình hình theo tiêu chí đang có vấn đề – nội dung của biến {tinh_hinh}."""
     lines = []
-    total, absent = int(student.get("total_sessions") or 0), int(student.get("absent_sessions") or 0)
-    if student.get("score_attendance") and total:
-        lines.append(f"em đã vắng {absent}/{total} buổi ({round(100 * absent / total)}%)")
+    if student.get("score_attendance") and attendance_text.has_attendance(student):
+        lines.append(attendance_text.message_phrase(student))
     days = student.get("days_since_last_access")
     if student.get("score_inactivity"):
-        lines.append("em chưa truy cập môn học trên Moodle" if days is None
+        lines.append("em chưa có hoạt động nào trong môn học trên Moodle thời gian gần đây" if days is None
                      else f"em đã {days} ngày chưa vào môn học trên Moodle" if days > 7
                      else "mức độ truy cập môn học của em thấp hơn nhiều so với lớp")
     missing = _missing_assignments(student)
@@ -102,9 +104,15 @@ def build_context(student: Mapping, course: Mapping, teacher: Mapping, *, today:
         "ma_mon": str(course.get("shortname") or ""), "ten_mon": str(course.get("fullname") or ""),
         "ten_gv": str(teacher.get("full_name") or ""), "email_gv": str(teacher.get("email") or ""),
         "xung_ho": salutation,
-        "so_buoi_vang": str(int(student.get("absent_sessions") or 0)), "tong_buoi": str(total),
-        "ty_le_vang": f"{round(100 * int(student.get('absent_sessions') or 0) / total)}%" if total else "chưa có buổi điểm danh",
-        "so_ngay_khong_vao": "chưa từng" if days is None else str(days),
+        "chuyen_can": attendance_text.summary(student),
+        # Môn lấy chuyên cần từ sổ điểm không có số buổi: không điền số giả (trình soạn tin cảnh báo khi mẫu dùng 2 biến này)
+        "so_buoi_vang": ("không rõ" if attendance_text.is_gradebook(student)
+                         else str(int(student.get("absent_sessions") or 0))),
+        "tong_buoi": "không rõ" if attendance_text.is_gradebook(student) else str(total),
+        "ty_le_vang": ((f"{round(100 * int(student.get('absent_sessions') or 0) / total)}%"
+                        + (" (theo sổ điểm)" if attendance_text.is_gradebook(student) else "")) if total
+                       else "chưa có buổi điểm danh"),
+        "so_ngay_khong_vao": "nhiều" if days is None else str(days),     # "em đã nhiều ngày chưa truy cập"
         "bai_chua_nop": ", ".join(missing) if missing else "bài tập",
         "so_bai_thieu": str(len(missing)),
         "muc_rui_ro": LEVEL_LABELS.get(student.get("risk_level"), ""),
@@ -139,3 +147,16 @@ def render(subject: str, body: str, context: Mapping[str, str]) -> Rendered:
 
     out_subject = " ".join(fill(subject).split())       # tiêu đề email một dòng
     return Rendered(subject=out_subject[:255], body=fill(body).strip())
+
+
+SESSION_VARIABLES = ("so_buoi_vang", "tong_buoi")
+
+
+def session_variable_notice(subject: str, body: str, students: list[Mapping]) -> str | None:
+    """Lời nhắc khi mẫu dùng biến theo buổi mà có sinh viên học môn lấy chuyên cần từ sổ điểm (không có số buổi)."""
+    used = [v for v in SESSION_VARIABLES if v in placeholders(f"{subject or ''} {body}")]
+    if not used or not any(attendance_text.is_gradebook(s) for s in students):
+        return None
+    names = ", ".join("{" + v + "}" for v in used)
+    return (f"Mẫu tin dùng {names} nhưng môn này chỉ có tỷ lệ chuyên cần trong sổ điểm, không có số buổi, nên các biến "
+            "đó sẽ ghi \"không rõ\". Nên đổi sang {chuyen_can}.")

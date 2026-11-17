@@ -39,11 +39,16 @@ def filters(conn: Connection, today: date) -> dict:
         SELECT DISTINCT faculty_id AS id, faculty_name AS name
         FROM analytics.fact_course_progress_daily WHERE stat_date <= :today
         ORDER BY name""", {"today": today})
+    # Bộ môn / chuyên ngành: dùng thay ô chọn khoa khi dữ liệu chỉ có một khoa
+    departments = fetch_all(conn, """
+        SELECT DISTINCT category_id AS id, category_name AS name, faculty_id
+        FROM analytics.fact_course_progress_daily WHERE stat_date <= :today
+        ORDER BY name""", {"today": today})
     years = fetch_all(conn, """
         SELECT DISTINCT academic_year FROM analytics.fact_course_progress_daily
         WHERE stat_date <= :today ORDER BY academic_year DESC""", {"today": today})
     academic_year, semester = current_term(conn, today)
-    return dict(faculties=faculties, academic_years=[str(r["academic_year"]) for r in years],
+    return dict(faculties=faculties, departments=departments, academic_years=[str(r["academic_year"]) for r in years],
                 semesters=[1, 2, 3], current={"academic_year": academic_year, "semester": semester})
 
 

@@ -13,6 +13,9 @@ node "Máy chủ Docker (docker compose)" {
   node "etl (python:3.11-slim)" as ETL {
     artifact "python -m etl.scheduler" as SCH
   }
+  node "moodle-stub (python:3.11-slim)" as STUB {
+    artifact "python -m tools.moodle_ws_stub\n(Moodle Web Service mô phỏng)" as WS
+  }
   node "init (chạy một lần)" as INIT {
     artifact "bootstrap.sh: migrate, mock data,\nbackfill, sync-users" as BS
   }
@@ -29,6 +32,9 @@ BE --> AN : TCP 5432
 ETL --> MD : TCP 5432 (chỉ đọc)
 ETL --> AN : TCP 5432
 INIT --> DB : TCP 5432
+BE --> STUB : HTTP :8091 (gửi tin)
+ETL --> STUB : HTTP :8091 (gửi tin)
+STUB --> MD : TCP 5432
 DB --> V1
 BE --> V2
 @enduml

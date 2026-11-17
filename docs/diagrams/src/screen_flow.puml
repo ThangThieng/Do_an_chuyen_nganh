@@ -5,7 +5,9 @@ skinparam rectangleBackgroundColor #FFFFFF
 rectangle "MH01\nĐăng nhập" as LOGIN
 package "Quản trị viên (/admin)" {
   rectangle "MH02\nTổng quan" as OV
-  rectangle "Drill-down: môn của khoa\n→ sinh viên của môn" as DD
+  rectangle "Trang Khoa" as FAC
+  rectangle "Trang Môn học\n(chi tiết sinh viên, chỉ xem)" as DD
+  rectangle "Ngăn Nguồn & cách tính" as SRC
   rectangle "MH03\nLưu lượng" as TR
   rectangle "MH04\nBáo cáo" as RP
   rectangle "MH05\nDanh mục môn học" as CT
@@ -14,11 +16,15 @@ package "Quản trị viên (/admin)" {
   rectangle "MH07\nNhật ký ETL" as ETL
   rectangle "MH08\nSao lưu & phục hồi" as BK
   rectangle "Hộp thoại\nxác nhận phục hồi" as RST
+  rectangle "MH16\nKênh gửi tin" as CHN
 }
 package "Giảng viên (/teacher)" {
   rectangle "MH09\nCảnh báo sinh viên" as RISK
   rectangle "MH10\nChi tiết sinh viên (Modal)" as DET
   rectangle "MH11\nTiến độ lớp" as PRG
+  rectangle "MH14\nThiết lập cảnh báo" as RULE
+  rectangle "MH15\nCan thiệp" as INT
+  rectangle "Trình soạn tin" as MSG
 }
 package "Dùng chung" {
   rectangle "MH12\nTài khoản & đổi mật khẩu" as ACC
@@ -26,18 +32,25 @@ package "Dùng chung" {
 }
 LOGIN --> OV : vai trò ADMIN
 LOGIN --> RISK : vai trò TEACHER\n(môn đầu tiên)
-OV --> DD : nhấn cột / dòng khoa
+OV --> FAC : nhấn cột / dòng khoa
+FAC --> DD : nhấn một môn
+OV --> SRC : liên kết trên biểu đồ
 OV --> RP : nút Export
 OV --> TR : menu
 OV --> CT : menu
 OV --> US : menu Hệ thống
 OV --> ETL : menu Hệ thống
 OV --> BK : menu Hệ thống
+OV --> CHN : menu Hệ thống
 US --> TMP : Đặt lại mật khẩu
 BK --> RST : Phục hồi
 RISK --> DET : nút "Chi tiết"
 RISK --> PRG : tab Tiến độ lớp
 PRG --> RISK : tab Cảnh báo
+RISK --> RULE : tab Thiết lập cảnh báo
+RISK --> INT : tab Can thiệp
+DET --> MSG : nút gửi tin
+INT --> MSG : Soạn tin
 OV --> ACC : menu tài khoản
 RISK --> ACC : menu tài khoản
 OV --> HELP : menu Trợ giúp

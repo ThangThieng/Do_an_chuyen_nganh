@@ -18,7 +18,7 @@ describe("định dạng số vi-VN", () => {
     expect(share(1, 4)).toBe(25);
   });
   it("số ngày chưa truy cập", () => {
-    expect(fmtDaysSince(null)).toBe("Chưa truy cập");
+    expect(fmtDaysSince(null)).toBe("Chưa có hoạt động");
     expect(fmtDaysSince(0)).toBe("Hôm nay");
     expect(fmtDaysSince(16)).toBe("16 ngày trước");
   });

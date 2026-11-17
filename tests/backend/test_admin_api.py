@@ -55,7 +55,7 @@ def _by_faculty(courses) -> dict[int, list[dict]]:
 def test_enrollment_by_faculty(client, admin_headers, courses):
     body = client.get(f"{API}/admin/enrollment/by-faculty", params=TERM, headers=admin_headers).json()
     groups = _by_faculty(courses)
-    assert len(body["items"]) == len(groups) == 5
+    assert len(body["items"]) == len(groups) >= 1
     for item in body["items"]:
         own = groups[item["faculty_id"]]
         assert item["enrolled"] == sum(c["enrolled"] for c in own)
@@ -65,7 +65,7 @@ def test_enrollment_by_faculty(client, admin_headers, courses):
     assert sum(i["enrolled"] for i in body["items"]) == sum(c["enrolled"] for c in courses)
 
 
-def test_faculty_courses_drill_down(client, admin_headers, courses):
+def test_faculty_courses_drill_down(client, admin_headers, courses, db):
     for faculty_id, own in _by_faculty(courses).items():
         url = f"{API}/admin/enrollment/faculties/{faculty_id}/courses"
         body = client.get(url, params=TERM, headers=admin_headers).json()
@@ -76,7 +76,10 @@ def test_faculty_courses_drill_down(client, admin_headers, courses):
         assert body["summary"]["enrolled"] == sum(c["enrolled"] for c in own)
         assert {i["rule_scope"] for i in items} <= {"GLOBAL", "COURSE"}
         by_code = client.get(url, params={**TERM, "sort": "shortname", "order": "asc"}, headers=admin_headers).json()["items"]
-        assert [i["shortname"] for i in by_code] == sorted(c["course_shortname"] for c in own)
+        # Thứ tự theo collation của PostgreSQL (mã môn thật lẫn chữ hoa / thường, dấu cách) – hỏi chính CSDL
+        expected = [r[0] for r in db.execute("SELECT s FROM unnest(%s::text[]) s ORDER BY s",
+                                             ([c["course_shortname"] for c in own],)).fetchall()]
+        assert [i["shortname"] for i in by_code] == expected
     assert client.get(url, params={"sort": "course_id; DROP"}, headers=admin_headers).status_code == 422
     assert client.get(f"{API}/admin/enrollment/faculties/999999/courses", headers=admin_headers).status_code == 404
 
@@ -140,7 +143,8 @@ def test_traffic_realtime(client, admin_headers, db, snapshot):
     requests_today = db.execute("SELECT SUM(total_requests) FROM analytics.fact_server_traffic_hourly WHERE stat_date = %s",
                                 (snapshot,)).fetchone()[0]
     assert body["requests_so_far"] == requests_today
-    assert body["current_online"] > 0 and body["current_online_source"] == "SESSIONS"
+    # Có bảng phiên phủ tới AS_OF thì đếm phiên, không thì ước tính từ nhật ký (dữ liệu thật)
+    assert body["current_online"] >= 0 and body["current_online_source"] in ("SESSIONS", "LOGSTORE")
 
 
 def test_traffic_heatmap(client, admin_headers):

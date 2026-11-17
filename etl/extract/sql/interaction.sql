@@ -21,10 +21,33 @@ logs AS (
       AND l.anonymous = 0
       AND l.timecreated <= :as_of
     GROUP BY l.courseid, l.userid
+),
+-- Bằng chứng hoạt động ngoài nhật ký: bài nộp, lượt làm bài kiểm tra. Nhật ký thật chỉ có từ 13/09/2026 trong khi
+-- nhiều môn mở từ tháng 8 -> SV có nộp bài nhưng không có dòng log nào không bị coi là "chưa từng hoạt động".
+evidence AS (
+    SELECT course_id, user_id, MAX(ts) AS evidence_ts
+    FROM (
+        SELECT a.course AS course_id, s.userid AS user_id, MAX(s.timemodified) AS ts
+        FROM mdl_assign_submission s
+        JOIN mdl_assign a ON a.id = s.assignment
+        WHERE a.course = ANY(CAST(:course_ids AS bigint[]))
+          AND s.userid > 0 AND s.status = 'submitted' AND s.timemodified <= :as_of
+        GROUP BY a.course, s.userid
+        UNION ALL
+        SELECT q.course, qa.userid, MAX(qa.timefinish)
+        FROM mdl_quiz_attempts qa
+        JOIN mdl_quiz q ON q.id = qa.quiz
+        WHERE q.course = ANY(CAST(:course_ids AS bigint[]))
+          AND qa.state = 'finished' AND qa.timefinish > 0 AND qa.timefinish <= :as_of
+        GROUP BY q.course, qa.userid
+    ) x
+    GROUP BY course_id, user_id
 )
 SELECT se.course_id,
        se.user_id,
-       lg.last_access_ts,
+       -- Hoạt động cuối = mốc muộn nhất giữa log và bài nộp / bài kiểm tra (GREATEST bỏ qua NULL)
+       GREATEST(lg.last_access_ts, ev.evidence_ts) AS last_access_ts,
+       lg.last_access_ts                           AS log_last_access_ts,
        COALESCE(lg.total_access_count, 0) AS total_access_count,
        COALESCE(lg.access_count_7d, 0)    AS access_count_7d,
        COALESCE(lg.access_count_14d, 0)   AS access_count_14d,
@@ -35,4 +58,5 @@ SELECT se.course_id,
        COALESCE(lg.actions_day, 0)        AS actions_day
 FROM student_enrol se
 LEFT JOIN logs lg ON lg.course_id = se.course_id AND lg.user_id = se.user_id
+LEFT JOIN evidence ev ON ev.course_id = se.course_id AND ev.user_id = se.user_id
 ORDER BY se.course_id, se.user_id

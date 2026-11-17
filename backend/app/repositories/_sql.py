@@ -11,10 +11,12 @@ from collections.abc import Mapping
 # Thứ tự mức rủi ro: RED -> YELLOW -> GREEN
 LEVEL_RANK = "CASE risk_level WHEN 'RED' THEN 0 WHEN 'YELLOW' THEN 1 ELSE 2 END"
 
-# SV "có tương tác trong học kỳ": có ít nhất 1 log từ ngày bắt đầu môn (khớp total_active_students của
-# fact_course_progress_daily). weekly_activity chỉ đếm log từ startdate nên dùng được làm căn cứ.
-IS_ACTIVE_IN_TERM = """EXISTS (SELECT 1 FROM jsonb_array_elements(weekly_activity) w
-                               WHERE (w->>'views')::int + (w->>'actions')::int > 0)"""
+# SV "có tương tác trong học kỳ" (khớp total_active_students của fact_course_progress_daily): có ít nhất 1 log từ
+# ngày bắt đầu môn (weekly_activity chỉ đếm log từ startdate), HOẶC không có dòng log nào nhưng có bài nộp / lượt
+# làm bài kiểm tra (last_access_time lấy cả mốc đó – log thật chỉ có từ 13/09/2026 trong khi nhiều môn mở từ tháng 8).
+IS_ACTIVE_IN_TERM = """(EXISTS (SELECT 1 FROM jsonb_array_elements(weekly_activity) w
+                                WHERE (w->>'views')::int + (w->>'actions')::int > 0)
+                        OR (total_access_count = 0 AND last_access_time IS NOT NULL))"""
 
 
 def where(conditions: list[str]) -> str:

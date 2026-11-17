@@ -67,7 +67,7 @@ LIVE = MessagingSettings(mail_transport="smtp", smtp_host="smtp.example", mail_d
 
 def test_demo_data_can_never_reach_real_recipients(monkeypatch):
     monkeypatch.setenv("LMS_AS_OF", "2026-11-06T10:30:00+07:00")
-    assert any("demo" in r for r in live_blockers(LIVE, "EMAIL", check_ok=True))
+    assert any("mốc cố định" in r for r in live_blockers(LIVE, "EMAIL", check_ok=True))
     assert email_mode(LIVE, check_ok=True)[0] == MODE_REDIRECT          # tự hạ về chuyển hướng
     assert moodle_mode(LIVE, check_ok=True)[0] is None                  # Moodle thật bị từ chối
 

@@ -52,7 +52,8 @@ def status(conn: Connection = Depends(get_conn)) -> dict:
 def test_moodle(user: CurrentUser = Depends(admin_user), conn: Connection = Depends(get_conn)) -> dict:
     settings = _settings()
     try:
-        info = MoodleClient(settings).site_info()
+        with MoodleClient(settings) as client:
+            info = client.site_info()
     except DeliveryError as exc:
         record_check(conn, settings, CHANNEL_MOODLE, False, {"error": str(exc)}, user.user_id)
         conn.commit()

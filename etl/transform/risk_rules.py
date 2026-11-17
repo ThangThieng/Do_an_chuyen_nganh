@@ -8,7 +8,8 @@ Luật chấm điểm rủi ro "đèn giao thông" – SPEC Phần 2.3.
 
 Xếp mức (RISK_LEVEL_RULES, đã hiệu chỉnh): RED khi C2 = 2 hoặc >= 2 tiêu chí = 2 hoặc tổng >= 4 ·
 YELLOW: tổng >= 1 · GREEN: tổng = 0.
-risk_score = round(100 × (0.35·C1 + 0.30·C2 + 0.35·C3) / 2), làm tròn half-up.
+risk_score = round(100 × (0.35·C1 + 0.30·C2 + 0.35·C3) / 2), làm tròn half-up. Tiêu chí không có dữ liệu
+(môn không có điểm danh / chưa có bài tới hạn) không tính: chia cho tổng trọng số của các tiêu chí còn lại.
 Chưa có dữ liệu (0 buổi điểm danh / 0 bài tới hạn) -> tiêu chí đó = 0; attendance_status = NO_DATA khi 0 buổi.
 
 So sánh tỷ lệ với ngưỡng bằng phân số chính xác (Fraction) để các ca biên như "vắng đúng 3/10 buổi = 30%"
@@ -23,6 +24,7 @@ from collections.abc import Mapping, Sequence
 from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
 
+from common import attendance_text
 from etl.config import RISK_LEVEL_RULES, RISK_THRESHOLDS, RISK_WEIGHTS
 
 ATTENDANCE_STATUS_BY_SCORE = {0: "OK", 1: "WARN", 2: "CRITICAL"}
@@ -61,6 +63,8 @@ def _extra_rule_matches(rule: Mapping, r: Mapping) -> str | None:
         n = int(r.get("max_consecutive_missing") or 0)
         return f"Bỏ nộp {n} bài liên tiếp" if n >= rule["count"] else None
     if t == "absent_sessions":
+        if r.get("attendance_source") == "GRADEBOOK":      # sổ điểm chỉ có tỷ lệ, không có số buổi
+            return None
         detail = r.get("attendance_detail") or []
         if rule.get("attendance_id"):
             chosen = [d for d in detail if int(d["attendance_id"]) == int(rule["attendance_id"])]
@@ -78,17 +82,41 @@ def _extra_rule_matches(rule: Mapping, r: Mapping) -> str | None:
     if t == "absence_rate":
         total = int(r["total_sessions"])
         if total and Fraction(int(r["absent_sessions"]), total) >= Fraction(int(rule["percent"]), 100):
+            if r.get("attendance_source") == "GRADEBOOK":
+                return f"Vắng {int(r['absent_sessions'])}% theo sổ điểm (từ {rule['percent']}%)"
             return f"Vắng {int(r['absent_sessions'])}/{total} buổi (từ {rule['percent']}%)"
         return None
     if t == "inactive_days":
         days = r["days_since_last_access"]
         if days is None:
-            return "Chưa từng truy cập môn học"
+            return no_activity_reason(r)
         return f"{days} ngày chưa truy cập" if days >= rule["days"] else None
     if t == "missing_count":
         n = int(r["missing_assignments_count"])
         return f"Thiếu {n} bài tập" if n >= rule["count"] else None
     raise ValueError(f"Loại luật bổ sung không hỗ trợ: {t}")
+
+
+def no_activity_reason(r: Mapping) -> str:
+    """
+    Lý do khi không có hoạt động nào (không log, không bài nộp, không lượt làm bài kiểm tra). Nhật ký chỉ có từ một
+    ngày nhất định (r["log_start"], vd "13/09/2026") nên không khẳng định "chưa từng truy cập".
+    """
+    start = r.get("log_start")
+    return f"Không có hoạt động nào trong môn từ {start} (ngày đầu của nhật ký)" if start         else "Không có hoạt động nào được ghi nhận trong môn"
+
+
+def applicable_criteria(r: Mapping) -> int:
+    """Số tiêu chí có dữ liệu: C2 luôn có; C1 khi môn có điểm danh; C3 khi đã có bài tới hạn."""
+    return 1 + (r["total_sessions"] > 0) + (r["total_assignments"] > 0)
+
+
+def red_total_threshold(red_min_total: int, applicable: int) -> int:
+    """
+    Ngưỡng "tổng điểm" của mức Nguy cơ cao, co theo số tiêu chí có dữ liệu (quyết định của chủ dự án 17/11/2026):
+    đủ 3 tiêu chí giữ nguyên (4), còn 2 tiêu chí -> làm tròn lên 4 × 2/3 = 3, còn 1 tiêu chí -> 2.
+    """
+    return -(-red_min_total * applicable // 3)
 
 
 def score_student(r: Mapping, class_median_14d: float,
@@ -100,6 +128,7 @@ def score_student(r: Mapping, class_median_14d: float,
     r cần các khóa: total_sessions, absent_sessions, days_since_last_access (None = chưa từng truy cập),
     access_count_14d, total_assignments, missing_assignments_count; khi có luật bổ sung cần thêm
     max_consecutive_missing và attendance_detail ([{attendance_id, name, sessions, absent}]).
+    attendance_source = "GRADEBOOK" (tùy chọn): total/absent_sessions là phần trăm quy đổi từ sổ điểm (thang 100).
     class_median_14d: trung vị access_count_14d của lớp.
     """
     _validate(r)
@@ -114,7 +143,7 @@ def score_student(r: Mapping, class_median_14d: float,
     if total_sessions > 0:
         c1 = _level(absent, total_sessions, cfg["absence_yellow"], cfg["absence_red"])
         if c1:
-            reasons.append(f"Vắng {absent}/{total_sessions} buổi ({absent / total_sessions:.0%})")
+            reasons.append(attendance_text.risk_reason(r))
 
     # ---- C2: không tương tác
     days = r["days_since_last_access"]
@@ -127,7 +156,7 @@ def score_student(r: Mapping, class_median_14d: float,
     else:
         c2 = 0
     if days is None:
-        reasons.append("Chưa từng truy cập môn học")
+        reasons.append(no_activity_reason(r))
     elif c2:
         reasons.append(f"{days} ngày chưa truy cập" if days > cfg["inactive_yellow_days"]
                        else "Tương tác thấp hơn 50% trung vị lớp")
@@ -144,7 +173,7 @@ def score_student(r: Mapping, class_median_14d: float,
     red_criteria = sum(score == 2 for score in (c1, c2, c3))
     is_red = ((level_rules["red_if_inactivity_red"] and c2 == 2)
               or red_criteria >= level_rules["red_min_red_criteria"]
-              or total >= level_rules["red_min_total"])
+              or total >= red_total_threshold(level_rules["red_min_total"], applicable_criteria(r)))
     level = "RED" if is_red else "YELLOW" if total >= 1 else "GREEN"
 
     # ---- luật bổ sung của môn: chỉ nâng mức
@@ -161,9 +190,14 @@ def score_student(r: Mapping, class_median_14d: float,
         if text not in reasons:
             reasons.append(text)
 
-    weighted = (Decimal(str(weights["attendance"])) * c1 + Decimal(str(weights["inactivity"])) * c2
-                + Decimal(str(weights["assignment"])) * c3)
-    score = int((Decimal(100) * weighted / 2).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    # Tiêu chí không có dữ liệu (môn không có điểm danh / chưa có bài tới hạn) KHÔNG tính vào điểm: trọng số chia lại
+    # cho các tiêu chí còn lại để điểm 0–100 vẫn so sánh được giữa các môn. Đủ 3 tiêu chí thì như công thức gốc.
+    parts = [(weights["attendance"], c1, total_sessions > 0), (weights["inactivity"], c2, True),
+             (weights["assignment"], c3, total_assign > 0)]
+    applied = [(Decimal(str(w)), c) for w, c, ok in parts if ok]
+    weight_sum = sum(w for w, _ in applied)
+    weighted = sum(w * c for w, c in applied)
+    score = int((Decimal(100) * weighted / (2 * weight_sum)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
     return dict(
         score_attendance=c1, score_inactivity=c2, score_assignment=c3,

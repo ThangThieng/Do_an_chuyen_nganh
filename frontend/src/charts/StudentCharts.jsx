@@ -35,7 +35,9 @@ function CompareBars({ metrics, unit, max }) {
 }
 
 /** Tách chỉ số % và chỉ số lượt thành 2 biểu đồ để không trộn 2 đơn vị trên một trục. */
-export function StudentCompareChart({ metrics }) {
+export function StudentCompareChart({ metrics: all }) {
+  // Chỉ số cả lớp đều không có dữ liệu (vd hoàn thành hoạt động khi môn không theo dõi hoàn thành): bỏ khỏi biểu đồ
+  const metrics = all.filter((m) => m.student != null || m.class_avg != null);
   const percent = metrics.filter((m) => m.unit === "%");
   const counts = metrics.filter((m) => m.unit !== "%");
   const missing = metrics.filter((m) => m.student == null).map((m) => m.label);
@@ -48,20 +50,30 @@ export function StudentCompareChart({ metrics }) {
   );
 }
 
-/** Lượt xem & thao tác theo tuần; điểm trên đường: tô đặc = có mặt đủ các buổi trong tuần, rỗng = có buổi vắng, không điểm = tuần không điểm danh. */
-export function WeeklyActivityChart({ weeks }) {
+/**
+ * Lượt xem & thao tác theo tuần; điểm trên đường: tô đặc = có mặt đủ các buổi trong tuần, rỗng = có buổi vắng,
+ * không điểm = tuần không điểm danh. Chú thích chấm chỉ hiện khi có ít nhất một tuần có buổi điểm danh
+ * (môn lấy chuyên cần từ sổ điểm hoặc không có điểm danh thì không có dữ liệu theo tuần).
+ * gradebook: chuyên cần của SV lấy từ sổ điểm (chỉ có tỷ lệ cả kỳ).
+ */
+export function WeeklyActivityChart({ weeks, gradebook = false }) {
+  const hasSessions = weeks.some((w) => w.sessions > 0);
+  // Tuần trước khi có nhật ký (môn mở trước ngày đầu của log): để trống, không vẽ 0
+  const noLog = weeks.filter((w) => w.no_log).map((w) => w.week);
+  const noSessionText = gradebook ? "Chuyên cần chỉ có tỷ lệ cả kỳ (theo sổ điểm), không có theo tuần"
+    : hasSessions ? "Tuần không có buổi điểm danh" : "Môn không có dữ liệu điểm danh";
   const { data, options } = useMemo(() => ({
     data: {
       labels: weeks.map((w) => `T${w.week}`),
       datasets: [
         {
-          label: "Lượt xem", data: weeks.map((w) => w.views), borderColor: SERIES.blue, backgroundColor: SERIES.blue, tension: 0.3,
+          label: "Lượt xem", data: weeks.map((w) => (w.no_log ? null : w.views)), borderColor: SERIES.blue, backgroundColor: SERIES.blue, tension: 0.3,
           pointRadius: weeks.map((w) => (w.attended == null ? 0 : 5)),
           pointBackgroundColor: weeks.map((w) => (w.attended ? SERIES.blue : "#ffffff")),
           pointBorderColor: SERIES.blue, pointBorderWidth: 2, pointStyle: "circle",
         },
         {
-          label: "Thao tác (nộp bài, đăng bài)", data: weeks.map((w) => w.actions), borderColor: SERIES.aqua,
+          label: "Thao tác (nộp bài, đăng bài)", data: weeks.map((w) => (w.no_log ? null : w.actions)), borderColor: SERIES.aqua,
           backgroundColor: SERIES.aqua, tension: 0.3, pointStyle: "line",
         },
       ],
@@ -75,23 +87,30 @@ export function WeeklyActivityChart({ weeks }) {
             title: (ctx) => `Tuần ${weeks[ctx[0].dataIndex].week}`,
             afterBody: (ctx) => {
               const w = weeks[ctx[0].dataIndex];
-              return w.sessions ? `Điểm danh: có mặt ${w.present}/${w.sessions} buổi` : "Tuần không có buổi điểm danh";
+              if (w.no_log) return "Chưa có nhật ký cho tuần này";
+              return w.sessions ? `Điểm danh: có mặt ${w.present}/${w.sessions} buổi` : noSessionText;
             },
           },
         },
       },
       scales: { x: axis({ grid: { display: false } }), y: axis({ beginAtZero: true, ticks: { precision: 0 } }) },
     },
-  }), [weeks]);
+  }), [weeks, noSessionText]);
+  const noLogText = noLog.length
+    ? `Tuần ${noLog[0]}${noLog.length > 1 ? `–${noLog[noLog.length - 1]}` : ""} để trống: môn mở trước ngày đầu của nhật ký nên chưa có số liệu.`
+    : null;
   return (
     <>
       <div className="chart-box" style={{ height: 250 }}>
         <Line data={data} options={options} plugins={[crosshair]} role="img" aria-label="Hoạt động theo tuần" />
       </div>
-      <div className="legend-row" style={{ marginTop: 6 }}>
-        <span><span className="dot-key" aria-hidden style={{ background: SERIES.blue, borderColor: SERIES.blue }} />có mặt đủ buổi học trong tuần</span>
-        <span><span className="dot-key" aria-hidden style={{ background: "#fff", borderColor: SERIES.blue }} />có buổi vắng</span>
-      </div>
+      {hasSessions ? (
+        <div className="legend-row" style={{ marginTop: 6 }}>
+          <span><span className="dot-key" aria-hidden style={{ background: SERIES.blue, borderColor: SERIES.blue }} />có mặt đủ buổi học trong tuần</span>
+          <span><span className="dot-key" aria-hidden style={{ background: "#fff", borderColor: SERIES.blue }} />có buổi vắng</span>
+        </div>
+      ) : <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>{noSessionText}.</div>}
+      {noLogText && <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>{noLogText}</div>}
     </>
   );
 }

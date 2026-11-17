@@ -13,12 +13,12 @@ def _write(directory: Path, name: str, content: str, newline: str = "\n") -> Non
 
 def test_real_analytics_migrations_are_valid():
     migrations = discover_migrations("analytics")
-    assert [m.version for m in migrations] == list(range(1, 15))     # V009–V014: luật theo môn, can thiệp, kênh gửi tin, ngày bắt đầu môn, chỉ mục phủ (v1.2)
+    assert [m.version for m in migrations] == list(range(1, 17))     # V009–V014: v1.2; V015: nguồn chuyên cần; V016: ghi chú lịch học kỳ
 
 
 def test_real_moodle_migrations_are_valid():
     migrations = discover_migrations("moodle")
-    assert [m.version for m in migrations] == [1, 2, 3, 4, 5]        # V005: bảng nhắn tin Moodle 3.9 (v1.2)
+    assert [m.version for m in migrations] == list(range(1, 10))     # V006–V009: sổ điểm, quiz, hạn riêng, vùng đệm nạp dữ liệu thật
 
 
 def test_checksum_ignores_crlf_line_endings(tmp_path):

@@ -12,6 +12,7 @@ entity "app_user" as U {
   * is_active : boolean
   password_changed_at : timestamptz
   last_login_at : timestamptz
+  * salutation : varchar(10)
   * created_at, updated_at : timestamptz
 }
 entity "intervention_log" as I {
@@ -23,7 +24,73 @@ entity "intervention_log" as I {
   * action_type : varchar
   content : text
   risk_level_at_time : risk_level_t
+  * origin : varchar(6)
+  outbound_id : bigint <<FK>>
   * created_at : timestamptz
+}
+entity "academic_term" as AT {
+  * academic_year : academic_year_t <<PK>>
+  * semester : semester_t <<PK>>
+  --
+  * start_date, end_date, week1_start : date
+}
+entity "risk_rule_set" as RS {
+  * rule_set_id : integer <<PK, identity>>
+  --
+  * scope : varchar(6)
+  course_id : integer
+  * version_no : integer
+  * label, preset : varchar
+  * params : jsonb
+  created_by : integer <<FK>>
+  * is_active : boolean
+  superseded_at : timestamptz
+}
+entity "message_template" as MT {
+  * template_id : integer <<PK, identity>>
+  --
+  owner_id : integer <<FK>>
+  * code, name, purpose : varchar
+  * subject : varchar(200)
+  * body : text
+  * is_active : boolean
+}
+entity "auto_prompt_rule" as AP {
+  * rule_id : integer <<PK, identity>>
+  --
+  * course_id : integer
+  * created_by : integer <<FK>>
+  * trigger_type : varchar(20)
+  * params : jsonb
+  * channels : text[]
+  * template_id : integer <<FK>>
+  * send_mode : varchar(6)
+  * cooldown_days : smallint
+  * is_active : boolean
+}
+entity "outbound_message" as OM {
+  * message_id : bigint <<PK, identity>>
+  --
+  * course_id, user_id : integer
+  * sender_id : integer <<FK>>
+  * origin, channel, status : varchar
+  rule_id, template_id : integer <<FK>>
+  * recipient : varchar(255)
+  * body : text
+  * attempts : smallint
+  provider_ref : varchar(255)
+  * idempotency_key : varchar(160) <<UQ>>
+  intervention_id : bigint <<FK>>
+  sent_at : timestamptz
+}
+entity "channel_check" as CC {
+  * channel : varchar(6) <<PK>>
+  --
+  * ok : boolean
+  * config_fingerprint : char(64)
+  * detail : jsonb
+  checked_by : integer <<FK>>
+  * checked_at : timestamptz
 }
 entity "etl_run_log" as R {
   * run_id : bigint <<PK, identity>>
@@ -74,6 +141,9 @@ entity "fact_course_progress_daily" as P {
   avg_completion_rate : percent_t (NULL = chưa có dữ liệu)
   red_count, yellow_count, green_count
   section_progress : jsonb
+  rule_set_id : integer <<FK>>
+  editing_teacher_ids : integer[]
+  course_start_date : date
   etl_run_id : bigint <<FK>>
 }
 entity "fact_student_risk_summary" as S {
@@ -95,7 +165,10 @@ entity "fact_student_risk_summary" as S {
   risk_score : 0..100
   risk_level : risk_level_t
   risk_reasons, weekly_activity,
-  assignment_detail : jsonb
+  assignment_detail, attendance_detail : jsonb
+  max_consecutive_missing : smallint
+  attendance_source : varchar(10)
+  * rule_set_id : integer <<FK>>
   etl_run_id : bigint <<FK>>
 }
 U ||--o{ I : teacher_id
@@ -105,4 +178,15 @@ R |o--o{ P : etl_run_id
 R |o--o{ S : etl_run_id
 P .. S : khóa logic course_id
 I .. S : khóa logic (course_id, user_id)
+RS ||--o{ S : rule_set_id
+RS |o--o{ P : rule_set_id
+U |o--o{ RS : created_by
+U |o--o{ MT : owner_id
+U ||--o{ AP : created_by
+MT ||--o{ AP : template_id
+U ||--o{ OM : sender_id
+AP |o--o{ OM : rule_id
+MT |o--o{ OM : template_id
+OM |o--o| I : intervention_id / outbound_id
+U |o--o{ CC : checked_by
 @enduml

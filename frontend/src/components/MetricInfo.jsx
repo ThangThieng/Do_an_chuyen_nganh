@@ -37,7 +37,7 @@ export function RuleTable({ rule }) {
       weight: pct(w.attendance) },
     { key: "c2", name: "C2 – Không tương tác",
       one: `quá ${t.inactive_yellow_days} ngày chưa vào, hoặc truy cập 14 ngày dưới ${pct(t.low_access_ratio)} trung vị lớp`,
-      two: `quá ${t.inactive_red_days} ngày hoặc chưa từng vào`, weight: pct(w.inactivity) },
+      two: `quá ${t.inactive_red_days} ngày hoặc không có hoạt động nào`, weight: pct(w.inactivity) },
     { key: "c3", name: "C3 – Thiếu bài tập", one: `thiếu từ ${pct(t.missing_yellow)} số bài đã tới hạn`,
       two: `từ ${pct(t.missing_red)}`, weight: pct(w.assignment) },
   ];
@@ -58,7 +58,8 @@ export function LevelRules({ rule }) {
     <ul style={{ paddingLeft: 18, margin: "8px 0" }}>
       <li><b style={{ color: RISK.RED.ink }}>Nguy cơ cao</b> khi
         {lr.red_if_inactivity_red ? " C2 = 2, hoặc" : ""} có từ {lr.red_min_red_criteria} tiêu chí đạt 2 điểm, hoặc tổng điểm
-        từ {lr.red_min_total}{rule.extra_rules?.length ? ", hoặc khớp một luật bổ sung mức đỏ của môn" : ""}</li>
+        từ {lr.red_min_total} (từ {Math.ceil((lr.red_min_total * 2) / 3)} khi chỉ 2 tiêu chí có dữ liệu)
+        {rule.extra_rules?.length ? ", hoặc khớp một luật bổ sung mức đỏ của môn" : ""}</li>
       <li><b style={{ color: RISK.YELLOW.ink }}>Cần lưu ý</b> khi tổng điểm từ 1 và không thuộc mức đỏ</li>
       <li><b style={{ color: RISK.GREEN.ink }}>An toàn</b> khi tổng điểm bằng 0</li>
     </ul>
@@ -129,7 +130,7 @@ function MetricDrawer({ keys, courseId, note, onClose }) {
       {fresh.data ? (
         <Descriptions size="small" column={1}
           items={[
-            { key: "asof", label: "Thời điểm tham chiếu", children: `${fmtDateTime(fresh.data.as_of)}${fresh.data.clock_frozen ? " (dữ liệu demo)" : ""}` },
+            { key: "asof", label: "Thời điểm tham chiếu", children: `${fmtDateTime(fresh.data.as_of)}${fresh.data.clock_frozen ? " (mốc cố định của bản dữ liệu đang dùng)" : ""}` },
             { key: "snap", label: "Snapshot cảnh báo mới nhất", children: fmtDate(fresh.data.latest_snapshot_date) },
             ...fresh.data.jobs.map((j) => ({ key: j.job_name, label: JOB_LABEL[j.job_name] ?? j.job_name,
               children: j.last_success_at ? fmtDateTime(j.last_success_at) : "chưa chạy" })),

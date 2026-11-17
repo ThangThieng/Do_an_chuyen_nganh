@@ -31,6 +31,7 @@ class ReportFilters:
     academic_year: str | None = None
     semester: int | None = None
     faculty_id: int | None = None
+    category_id: int | None = None         # bộ môn / chuyên ngành
     course_id: int | None = None
     risk_level: str | None = None
     from_date: date | None = None
@@ -48,7 +49,7 @@ class ReportQuery:
 # Độ rộng tương đối được chọn để trên PDF A4 ngang không từ nào (tiêu đề, email, tên khoa) bị ngắt giữa chừng
 ENROLLMENT_COLUMNS = (
     Column("faculty_name", "Khoa", width=1.3),
-    Column("category_name", "Bộ môn", width=1.5),
+    Column("category_name", "Bộ môn / Chuyên ngành", width=1.5),
     Column("course_shortname", "Mã môn", width=0.6),
     Column("course_fullname", "Tên môn", width=1.9),
     Column("total_enrolled_students", "SV đăng ký", "int", 0.7),
@@ -75,14 +76,14 @@ RISK_COLUMNS = (
     Column("absence_rate", "Vắng (%)", "percent", 0.6),
     Column("attendance_ratio", "Có mặt / số buổi", width=0.75),
     Column("missing_ratio", "Bài thiếu / tới hạn", width=0.75),
-    Column("days_since_last_access", "Ngày chưa truy cập", "days", 0.8),
+    Column("days_since_last_access", "Số ngày không hoạt động", "days", 0.8),
     Column("risk_reasons", "Lý do", "list", 2.35),
     Column("snapshot_date", "Ngày số liệu", "date", 0.75),
 )
 
 TRAFFIC_COLUMNS = (
     Column("stat_hour", "Giờ", "datetime", 1.2),
-    Column("total_requests", "Requests", "int"),
+    Column("total_requests", "Lượt hoạt động", "int"),
     Column("unique_users", "Người dùng", "int"),
     Column("login_count", "Đăng nhập", "int"),
     Column("failed_login_count", "Đăng nhập lỗi", "int"),
@@ -107,6 +108,16 @@ def report_columns(report_type: str) -> tuple[Column, ...]:
     return REPORTS[report_type][1]
 
 
+# Cột chỉ có ý nghĩa khi nguồn có dữ liệu: nếu mọi dòng đều rỗng (hoặc đều 0 với các cột đếm sự kiện) thì bỏ khỏi
+# báo cáo. Dữ liệu thật không có bảng hoàn thành hoạt động, nhật ký không có sự kiện đăng nhập và truy cập từ app.
+OPTIONAL_COLUMNS = frozenset({"avg_completion_rate", "login_count", "failed_login_count", "ws_requests"})
+
+
+def visible_columns(report_type: str, rows: list[dict]) -> tuple[Column, ...]:
+    return tuple(c for c in report_columns(report_type)
+                 if c.key not in OPTIONAL_COLUMNS or any(r.get(c.key) not in (None, 0) for r in rows))
+
+
 def _snapshot_day(f: ReportFilters, today: date) -> date:
     return min(f.to_date, today) if f.to_date else today
 
@@ -117,6 +128,9 @@ def _enrollment(f: ReportFilters, today: date) -> ReportQuery:
     if f.faculty_id is not None:
         conditions.append("faculty_id = :faculty_id")
         params["faculty_id"] = f.faculty_id
+    if f.category_id is not None:
+        conditions.append("category_id = :category_id")
+        params["category_id"] = f.category_id
     if f.course_id is not None:
         conditions.append("course_id = :course_id")
         params["course_id"] = f.course_id
@@ -145,6 +159,9 @@ def _risk(f: ReportFilters, today: date) -> ReportQuery:
     if f.faculty_id is not None:
         course_conditions.append("faculty_id = :faculty_id")
         params["faculty_id"] = f.faculty_id
+    if f.category_id is not None:
+        course_conditions.append("category_id = :category_id")
+        params["category_id"] = f.category_id
     if f.course_id is not None:
         course_conditions.append("course_id = :course_id")
         params["course_id"] = f.course_id
@@ -170,7 +187,8 @@ def _risk(f: ReportFilters, today: date) -> ReportQuery:
                f.student_code, f.student_name, f.email, f.risk_level, f.risk_score,
                {LEVEL_RANK.replace('risk_level', 'f.risk_level')} AS level_rank,
                f.absence_rate, f.attended_sessions, f.total_sessions,
-               f.attended_sessions || '/' || f.total_sessions AS attendance_ratio,
+               CASE WHEN f.attendance_source = 'GRADEBOOK' THEN f.attended_sessions || '% (sổ điểm)'
+                    ELSE f.attended_sessions || '/' || f.total_sessions END AS attendance_ratio,
                f.missing_assignments_count, f.total_assignments,
                f.missing_assignments_count || '/' || f.total_assignments AS missing_ratio,
                f.days_since_last_access, f.last_access_time, f.risk_reasons, f.snapshot_date

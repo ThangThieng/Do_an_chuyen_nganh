@@ -88,7 +88,7 @@ def build_pdf(doc: ExportDocument) -> bytes:
         for index, column in enumerate(doc.columns):
             raw = row.get(column.key)
             text = text_value(raw, column.kind)
-            # Chữ (kể cả "Chưa truy cập" trong cột số ngày) được bọc Paragraph để xuống dòng thay vì tràn sang ô bên
+            # Chữ (kể cả "Chưa có hoạt động" trong cột số ngày) được bọc Paragraph để xuống dòng thay vì tràn sang ô bên
             wrap = column.kind in WRAPPED_KINDS or (column.kind == "days" and raw is None)
             cells.append(Paragraph(escape(text), cell_style) if wrap and text else text)
             if column.kind == "risk_level" and row.get(column.key) in RISK_COLORS:

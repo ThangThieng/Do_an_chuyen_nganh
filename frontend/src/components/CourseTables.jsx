@@ -39,7 +39,7 @@ export function CourseTable({ facultyId, term, onPick, department, highlight }) 
       columns={[
         { title: "Mã môn", key: "shortname", dataIndex: "shortname", sorter: true, sortOrder: sortOrder("shortname") },
         { title: "Tên môn", key: "fullname", dataIndex: "fullname", sorter: true, sortOrder: sortOrder("fullname") },
-        { title: "Bộ môn", dataIndex: "category_name", responsive: ["lg"] },
+        { title: "Bộ môn / Chuyên ngành", dataIndex: "category_name", responsive: ["lg"] },
         { title: "Đăng ký", key: "enrolled", dataIndex: "enrolled", align: "right", render: fmtInt, sorter: true, sortOrder: sortOrder("enrolled") },
         { title: "Tương tác", key: "active", dataIndex: "active", align: "right", render: fmtInt, sorter: true, sortOrder: sortOrder("active") },
         { title: "Tỷ lệ tương tác", key: "active_rate", dataIndex: "active_rate", render: rateBar, sorter: true, sortOrder: sortOrder("active_rate") },
@@ -83,7 +83,7 @@ export function CourseStudentsTable({ courseId, onPick }) {
           { title: "Tương tác", dataIndex: "is_active", render: (v) => (v ? <Tag color="blue">Có</Tag> : <Tag>Chưa</Tag>) },
           { title: "Lượt truy cập", dataIndex: "total_access_count", align: "right", render: fmtInt },
           { title: "7 ngày", dataIndex: "access_count_7d", align: "right", render: fmtInt },
-          { title: "Truy cập cuối", dataIndex: "days_since_last_access", render: fmtDaysSince },
+          { title: "Hoạt động cuối", dataIndex: "days_since_last_access", render: fmtDaysSince },
           { title: "Mức rủi ro", dataIndex: "risk_level", render: (v) => <RiskBadge level={v} /> },
           { title: "Điểm", dataIndex: "risk_score", align: "right" },
         ]}

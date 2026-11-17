@@ -24,6 +24,7 @@ import sys
 import psycopg
 from psycopg import errors
 
+from common.person_name import full_name as person_full_name
 from backend.app.core.security import ROLE_ADMIN, ROLE_TEACHER, hash_password
 from database.config import load_db_config
 
@@ -76,7 +77,7 @@ def sync_users(password_arg: str | None, reset_password: bool, admins: list[str]
         created = updated = 0
         try:
             for user_id, username, firstname, lastname, email, suspended, role in accounts:
-                full_name = f"{lastname} {firstname}".strip()
+                full_name = person_full_name(lastname, firstname, user_id)
                 params = {"id": user_id, "username": username, "full_name": full_name, "email": email,
                           "role": role, "active": suspended == 0}
                 if user_id in existing:
@@ -192,7 +193,8 @@ def messaging_check(test_email: str | None, save: bool) -> int:
     print("\nMoodle Web Service:")
     if settings.moodle_ws_url:
         try:
-            info = MoodleClient(settings).site_info()
+            with MoodleClient(settings) as client:
+                info = client.site_info()
             ok = not info["missing_functions"]
             print(f"  {'OK' if ok else 'THIẾU QUYỀN'} – {info.get('sitename')} | {info.get('release')} | "
                   f"tài khoản {info.get('username')} (id {info.get('userid')})")

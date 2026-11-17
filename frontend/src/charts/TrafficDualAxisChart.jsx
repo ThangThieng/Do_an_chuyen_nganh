@@ -11,6 +11,7 @@ import { fmtDecimal, fmtInt, peakRanges } from "../utils/format.js";
 import { axis, crosshair, vnNumber } from "./setup.js";
 
 export default function TrafficDualAxisChart({ items, labelFormat = "HH:mm" }) {
+  const hasLogins = hasLoginEvents(items);
   const { data, options } = useMemo(() => {
     const annotations = Object.fromEntries(peakRanges(items).map((range, k) => [`peak${k}`, {
       type: "box", xMin: range.from - 0.5, xMax: range.to + 0.5, backgroundColor: CHROME.peakWash, borderWidth: 0,
@@ -21,7 +22,7 @@ export default function TrafficDualAxisChart({ items, labelFormat = "HH:mm" }) {
         labels: items.map((i) => dayjs(i.stat_hour).format(labelFormat)),
         datasets: [
           {
-            label: "Requests / giờ (trục trái, nét liền)", data: items.map((i) => i.total_requests), yAxisID: "y",
+            label: "Lượt hoạt động / giờ (trục trái, nét liền)", data: items.map((i) => i.total_requests), yAxisID: "y",
             borderColor: SERIES.blue, backgroundColor: "rgba(42, 120, 214, 0.10)", fill: "origin", tension: 0.3,
             pointStyle: "line",
           },
@@ -41,14 +42,15 @@ export default function TrafficDualAxisChart({ items, labelFormat = "HH:mm" }) {
             callbacks: {
               title: (ctx) => dayjs(items[ctx[0].dataIndex].stat_hour).format("dddd, DD/MM/YYYY HH:mm"),
               label: (ctx) => (ctx.datasetIndex === 0
-                ? ` Requests: ${fmtInt(ctx.parsed.y)}`
+                ? ` Lượt hoạt động: ${fmtInt(ctx.parsed.y)}`
                 : ` Online trung bình: ${fmtDecimal(ctx.parsed.y, 1)}`),
               afterBody: (ctx) => {
                 const item = items[ctx[0].dataIndex];
                 return [
                   `Online cao nhất: ${fmtInt(item.peak_online_users)}`,
                   `Người dùng hoạt động: ${fmtInt(item.unique_users)}`,
-                  `Đăng nhập: ${fmtInt(item.login_count)} (lỗi ${fmtInt(item.failed_login_count)})`,
+                  // Nguồn không có sự kiện đăng nhập (bản xuất nhật ký của trường): không hiện dòng luôn bằng 0
+                  ...(hasLogins ? [`Đăng nhập: ${fmtInt(item.login_count)} (lỗi ${fmtInt(item.failed_login_count)})`] : []),
                   ...(item.is_peak_hour ? ["Giờ cao điểm"] : []),
                 ];
               },
@@ -59,7 +61,7 @@ export default function TrafficDualAxisChart({ items, labelFormat = "HH:mm" }) {
           x: axis({ grid: { display: false }, ticks: { maxTicksLimit: 12, maxRotation: 0, autoSkip: true } }),
           y: axis({
             position: "left", beginAtZero: true, ticks: { callback: vnNumber },
-            title: { display: true, text: "Requests / giờ", color: CHROME.secondary },
+            title: { display: true, text: "Lượt hoạt động / giờ", color: CHROME.secondary },
           }),
           y1: axis({
             position: "right", beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: vnNumber },
@@ -68,7 +70,7 @@ export default function TrafficDualAxisChart({ items, labelFormat = "HH:mm" }) {
         },
       },
     };
-  }, [items, labelFormat]);
+  }, [items, labelFormat, hasLogins]);
 
   return <Line data={data} options={options} plugins={[crosshair]} aria-label="Biểu đồ lưu lượng truy cập theo giờ" role="img" />;
 }
@@ -79,14 +81,20 @@ export function PeakLegend({ inline = false }) {
   if (inline) return <span style={{ whiteSpace: "nowrap" }}> · {key}vùng tô = giờ cao điểm (vượt P90 của 28 ngày)</span>;
   return (
     <div className="legend-row" style={{ marginTop: 8 }}>
-      <span>{key}Giờ cao điểm (requests vượt P90 của 28 ngày)</span>
+      <span>{key}Giờ cao điểm (lượt hoạt động vượt P90 của 28 ngày)</span>
     </div>
   );
 }
 
+/** Có ít nhất một sự kiện đăng nhập (thành công hoặc lỗi) trong dữ liệu đang xem. */
+export const hasLoginEvents = (items) => (items ?? []).some((i) => i.login_count > 0 || i.failed_login_count > 0);
+
+/** Cột bảng lưu lượng; bỏ cột "Đăng nhập lỗi" khi nguồn không có sự kiện đăng nhập. */
+export const trafficColumnsFor = (items) => trafficTableColumns.filter((c) => c.dataIndex !== "failed_login_count" || hasLoginEvents(items));
+
 export const trafficTableColumns = [
   { title: "Giờ", dataIndex: "stat_hour", render: (v) => dayjs(v).format("DD/MM/YYYY HH:mm") },
-  { title: "Requests", dataIndex: "total_requests", align: "right", render: fmtInt },
+  { title: "Lượt hoạt động", dataIndex: "total_requests", align: "right", render: fmtInt },
   { title: "Người dùng", dataIndex: "unique_users", align: "right", render: fmtInt },
   { title: "Online TB", dataIndex: "avg_online_users", align: "right", render: (v) => fmtDecimal(v, 1) },
   { title: "Online cao nhất", dataIndex: "peak_online_users", align: "right", render: fmtInt },

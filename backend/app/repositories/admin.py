@@ -62,7 +62,7 @@ def overview_kpis(conn: Connection, academic_year: str, semester: int, faculty_i
         ORDER BY total_requests DESC, stat_hour
         LIMIT 1""", {"day_start": day_start, "current_hour": current_hour})
     online = fetch_one(conn, """
-        SELECT slot_start, online_users FROM analytics.etl_online_snapshot
+        SELECT slot_start, online_users, source FROM analytics.etl_online_snapshot
         WHERE slot_start <= :now ORDER BY slot_start DESC LIMIT 1""", {"now": now})
     avg_online = fetch_value(conn, """
         SELECT ROUND(AVG(online_users), 1) FROM analytics.etl_online_snapshot
@@ -88,6 +88,7 @@ def overview_kpis(conn: Connection, academic_year: str, semester: int, faculty_i
         avg_online_users_today=float(avg_online) if avg_online is not None else 0.0,
         current_online=int(online["online_users"]) if online else 0,
         current_online_at=online["slot_start"] if online else None,
+        current_online_source=online["source"] if online else None,
         unique_students=unique,
         red_rate_prev_week=(round(100 * int(prev["red"]) / int(prev["enrolled"]), 2)
                             if prev and int(prev["enrolled"]) else None),
@@ -239,6 +240,15 @@ def unique_students(conn: Connection, academic_year: str, semester: int, today: 
 # Chỉ lấy 2 cột của bộ luật (risk_rule_set cũng có course_id… – JOIN nguyên bảng làm tên cột bị mơ hồ)
 RULE_OF_ROW = "(SELECT rule_set_id, scope AS rule_scope, label AS rule_label FROM analytics.risk_rule_set) rs"
 
+def _group_agg(by_department: bool) -> str:
+    """Tổng hợp theo khoa, hoặc theo bộ môn / chuyên ngành (category) – dùng chung một câu SQL."""
+    group = ("faculty_id, faculty_name, category_id AS group_id, category_name AS group_name" if by_department
+             else "faculty_id, faculty_name, faculty_id AS group_id, faculty_name AS group_name")
+    group_by = "faculty_id, faculty_name, category_id, category_name" if by_department else "faculty_id, faculty_name"
+    return FACULTY_AGG.replace("SELECT faculty_id, faculty_name,", f"SELECT {group},", 1) \
+                      .replace("GROUP BY faculty_id, faculty_name", f"GROUP BY {group_by}", 1)
+
+
 FACULTY_AGG = f"""
         SELECT faculty_id, faculty_name,
                COUNT(*)                                     AS course_count,
@@ -264,25 +274,35 @@ def _pct(part, whole) -> float | None:
 
 
 @cached
-def compare_faculties(conn: Connection, academic_year: str, semester: int, today: date) -> dict:
-    """Khối "So sánh giữa các Khoa" (góp ý 1): quy mô, tỷ lệ tương tác, phân bố rủi ro, thay đổi so với tuần trước."""
+def compare_faculties(conn: Connection, academic_year: str, semester: int, today: date,
+                      group: str = "faculty") -> dict:
+    """
+    Khối "So sánh giữa các Khoa" (góp ý 1): quy mô, tỷ lệ tương tác, phân bố rủi ro, thay đổi so với tuần trước.
+    group = "department": so sánh các bộ môn / chuyên ngành (dùng khi dữ liệu chỉ có một khoa); group_id/group_name
+    là đơn vị được so sánh, faculty_id vẫn là khoa chứa nó.
+    """
+    by_department = group == "department"
+    agg = _group_agg(by_department)
     params = {"ay": academic_year, "sem": semester, "today": today}
-    rows = fetch_all(conn, f"WITH {latest_courses_cte()} {FACULTY_AGG} ORDER BY enrolled DESC, faculty_name", params)
-    prev = {r["faculty_id"]: r for r in fetch_all(
-        conn, f"WITH {latest_courses_cte()} {FACULTY_AGG}", {**params, "today": today - timedelta(days=7)})}
-    uniques = {int(r["faculty_id"]): int(r["n"]) for r in fetch_all(conn, f"""
-        WITH {latest_risk_snapshots_cte()}
-        SELECT r.faculty_id, COUNT(DISTINCT r.user_id) AS n FROM snap {SNAP_ROWS}
-        GROUP BY r.faculty_id""", params)}
+    rows = fetch_all(conn, f"WITH {latest_courses_cte()} {agg} ORDER BY enrolled DESC, group_name", params)
+    prev = {r["group_id"]: r for r in fetch_all(
+        conn, f"WITH {latest_courses_cte()} {agg}", {**params, "today": today - timedelta(days=7)})}
+    group_col = "latest.category_id" if by_department else "latest.faculty_id"
+    uniques = {int(r["group_id"]): int(r["n"]) for r in fetch_all(conn, f"""
+        WITH {latest_courses_cte()}, {latest_risk_snapshots_cte()}
+        SELECT {group_col} AS group_id, COUNT(DISTINCT r.user_id) AS n
+        FROM snap {SNAP_ROWS} JOIN latest ON latest.course_id = snap.course_id
+        GROUP BY 1""", params)}
     items = []
     for r in rows:
         enrolled = int(r["enrolled"])
         red_rate = _pct(r["red"], enrolled)
-        p = prev.get(r["faculty_id"])
+        p = prev.get(r["group_id"])
         prev_rate = _pct(p["red"], p["enrolled"]) if p else None
         items.append(dict(
-            faculty_id=r["faculty_id"], faculty_name=r["faculty_name"], course_count=int(r["course_count"]),
-            enrolled=enrolled, unique_students=uniques.get(int(r["faculty_id"]), 0),
+            faculty_id=r["faculty_id"], faculty_name=r["faculty_name"],
+            group_id=int(r["group_id"]), group_name=r["group_name"], course_count=int(r["course_count"]),
+            enrolled=enrolled, unique_students=uniques.get(int(r["group_id"]), 0),
             active=int(r["active"]), inactive=enrolled - int(r["active"]), active_rate=_pct(r["active"], enrolled),
             avg_submission_rate=r["avg_submission_rate"], avg_attendance_rate=r["avg_attendance_rate"],
             red=int(r["red"]), yellow=int(r["yellow"]), green=int(r["green"]),
@@ -309,17 +329,28 @@ def compare_faculties(conn: Connection, academic_year: str, semester: int, today
                      / NULLIF(SUM(total_enrolled_students) FILTER (WHERE attendance_rate IS NOT NULL), 0), 2)
                    AS avg_attendance_rate
         FROM latest""", params) or dict(avg_submission_rate=None, avg_attendance_rate=None))
-    return dict(school=school, items=items)
+    return dict(school=school, items=items, group=group)
 
 
 @cached
-def faculty_summary(conn: Connection, faculty_id: int, academic_year: str, semester: int, today: date) -> dict | None:
-    """Số liệu tổng hợp của một khoa (KPI trang Khoa, đường trung bình khoa trên biểu đồ so sánh các môn)."""
+def faculty_summary(conn: Connection, faculty_id: int, academic_year: str, semester: int, today: date,
+                    category_id: int | None = None) -> dict | None:
+    """
+    Số liệu tổng hợp của một khoa (KPI trang Khoa, đường trung bình khoa trên biểu đồ so sánh các môn).
+    category_id: chỉ tính một bộ môn / chuyên ngành của khoa (trang Khoa đang lọc theo bộ môn); các cột school_*
+    vẫn là toàn trường.
+    """
     data = compare_faculties(conn, academic_year, semester, today)
-    item = next((i for i in data["items"] if int(i["faculty_id"]) == faculty_id), None)
+    if category_id is None:
+        item = next((i for i in data["items"] if int(i["faculty_id"]) == faculty_id), None)
+    else:
+        departments = compare_faculties(conn, academic_year, semester, today, "department")
+        item = next((i for i in departments["items"]
+                     if int(i["faculty_id"]) == faculty_id and int(i["group_id"]) == category_id), None)
     if item is None:
         return None
     return dict(faculty_id=faculty_id, faculty_name=item["faculty_name"], course_count=item["course_count"],
+                category_id=category_id, category_name=item["group_name"] if category_id is not None else None,
                 enrolled=item["enrolled"], unique_students=item["unique_students"], active=item["active"],
                 avg_active_rate=item["active_rate"], avg_submission_rate=item["avg_submission_rate"],
                 avg_attendance_rate=item["avg_attendance_rate"], red=item["red"], yellow=item["yellow"],

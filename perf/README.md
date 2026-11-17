@@ -1,13 +1,15 @@
 # Kiểm thử hiệu năng (SPEC 6.2)
 
-Mọi script dùng **CSDL riêng**, không đụng dữ liệu demo (`lms_analytics`, `moodle_src`). Kết quả JSON ghi vào `perf/results/`.
+> Cập nhật 16/11/2026: dữ liệu mô phỏng đã gỡ bỏ, kèm hai công cụ dựng dữ liệu đo (`perf/build_x10.py`, `perf/etl_bench.py`).
+> Các số đo trong `perf/results/` là kết quả đã đo trên dữ liệu mô phỏng trước đó, giữ làm minh chứng. Các lệnh còn lại
+> (`explain_queries --dataset x1`, Locust, tải trang) chạy trên CSDL đang cấu hình trong `.env` (dữ liệu thật).
+
+Kết quả JSON ghi vào `perf/results/`.
 
 | Hạng mục | Dữ liệu | Lệnh |
 |---|---|---|
-| Dựng dữ liệu x10 cho SQL/API | `lms_analytics_x10`: nhân 10 lần bảng fact (150 môn, ~1,46 triệu dòng rủi ro) | `python -m perf.build_x10` |
 | Truy vấn SQL: `EXPLAIN (ANALYZE, BUFFERS)` | Các câu SQL mà API thật sự gửi xuống CSDL | `python -m perf.explain_queries --dataset x1` và `--dataset x10` |
 | API: Locust 50 người dùng (40 GV, 10 Admin), think-time 2–5 giây | x1 hoặc x10 (chạy API với `ANALYTICS_DB_NAME=lms_analytics_x10`) | xem bên dưới |
-| ETL | `moodle_src_x4` (2.000 SV, ~10.000 lượt ghi danh) → `lms_analytics_etlbench` | `python -m perf.etl_bench prepare` rồi `python -m perf.etl_bench measure` |
 | Tải trang (cache lạnh) | Bản build production | `cd frontend; npm run build; npm run preview` rồi `npm run perf` |
 
 ## Locust

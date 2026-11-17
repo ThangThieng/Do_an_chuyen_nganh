@@ -1,6 +1,8 @@
 """Xác thực, phân quyền 401/403, giới hạn đăng nhập sai, endpoint dùng chung (SPEC 6.3)."""
 from __future__ import annotations
 
+import os
+
 from tests.backend.conftest import (ADMIN_ID, ADMIN_PASSWORD, ADMIN_USERNAME, API, DEFAULT_PASSWORD, INACTIVE_ID,
                                     INACTIVE_USERNAME, bearer)
 
@@ -8,7 +10,8 @@ from tests.backend.conftest import (ADMIN_ID, ADMIN_PASSWORD, ADMIN_USERNAME, AP
 def test_health_does_not_require_login(client):
     body = client.get(f"{API}/health").json()
     assert body["status"] == "ok" and body["database"] is True
-    assert body["as_of"].startswith("2026-11-06") or not body["clock_frozen"]
+    frozen = os.getenv("LMS_AS_OF") or ""
+    assert (body["clock_frozen"] and body["as_of"].startswith(frozen[:10])) or (not frozen and not body["clock_frozen"])
 
 
 def test_login_success_and_me(client, accounts):

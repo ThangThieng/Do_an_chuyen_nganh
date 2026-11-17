@@ -10,15 +10,31 @@ rectangle "Phân hệ Giảng viên" {
   usecase "UC14 Ghi nhận can thiệp" as UC14
   usecase "UC15 Xuất danh sách cảnh báo" as UC15
   usecase "UC16 Xem tiến độ lớp" as UC16
+  usecase "UC18 Thiết lập luật cảnh báo\nriêng cho môn" as UC18
+  usecase "Xem trước tác động" as UC18a
+  usecase "UC19 Soạn và gửi tin nhắn\ncho sinh viên" as UC19
+  usecase "UC20 Quản lý mẫu tin nhắn" as UC20
+  usecase "UC21 Thiết lập nhắc tự động" as UC21
+  usecase "Chạy thử quy tắc nhắc" as UC21a
   usecase "UC01 Đăng nhập" as UC01
 }
 GV --> UC12
 GV --> UC16
 GV --> UC15
+GV --> UC18
+GV --> UC19
+GV --> UC20
+GV --> UC21
 UC12 ..> CM : <<include>>
 UC16 ..> CM : <<include>>
 UC15 ..> CM : <<include>>
+UC18 ..> CM : <<include>>
+UC19 ..> CM : <<include>>
+UC21 ..> CM : <<include>>
 UC12a .> UC12 : <<extend>>
+UC18 ..> UC18a : <<include>>
+UC21a .> UC21 : <<extend>>
+UC19 .> UC13 : <<extend>>\n(nút gửi tin)
 UC13 .> UC12 : <<extend>>\n(nhấn "Chi tiết")
 UC14 .> UC13 : <<extend>>\n(chọn hành động)
 CM ..> UC01 : <<include>>

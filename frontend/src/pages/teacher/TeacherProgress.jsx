@@ -65,12 +65,16 @@ export default function TeacherProgress() {
     };
   }, [d, granularity]);
 
+  // Môn không theo dõi hoàn thành hoạt động (dữ liệu thật không có bảng hoàn thành): ẩn mọi chỗ "Hoàn thành".
+  const hasCompletion = !!d && (d.summary?.avg_completion_rate != null || d.series.some((p) => p.avg_completion_rate != null));
+  const accessSections = !!d && d.sections.some((sec) => sec.access_rate != null);
+
   const ratesChart = useMemo(() => {
     if (!d) return null;
     const series = [
-      ["Hoàn thành hoạt động", "avg_completion_rate", SERIES.blue, []],
+      ...(hasCompletion ? [["Hoàn thành hoạt động", "avg_completion_rate", SERIES.blue, []]] : []),
       ["Nộp bài", "assignment_submission_rate", SERIES.orange, [6, 4]],
-      ["Chuyên cần", "attendance_rate", SERIES.aqua, [2, 3]],
+      ...(d.attendance_from_gradebook ? [] : [["Chuyên cần", "attendance_rate", SERIES.aqua, [2, 3]]]),
     ];
     return {
       data: {
@@ -92,12 +96,12 @@ export default function TeacherProgress() {
         },
       },
     };
-  }, [d, granularity]);
+  }, [d, granularity, hasCompletion]);
 
   const tableColumns = [
     { title: granularity === "week" ? "Tuần" : "Ngày", dataIndex: "period" },
     { title: "SV hoạt động", dataIndex: granularity === "week" ? "active_students_7d" : "active_students_day", align: "right", render: fmtInt },
-    { title: "Hoàn thành", dataIndex: "avg_completion_rate", align: "right", render: (v) => fmtPercent(v, 1, "–") },
+    ...(hasCompletion ? [{ title: "Hoàn thành", dataIndex: "avg_completion_rate", align: "right", render: (v) => fmtPercent(v, 1, "–") }] : []),
     { title: "Nộp bài", dataIndex: "assignment_submission_rate", align: "right", render: (v) => fmtPercent(v, 1, "–") },
     { title: "Chuyên cần", dataIndex: "attendance_rate", align: "right", render: (v) => fmtPercent(v, 1, "–") },
     { title: "Lượt xem", dataIndex: "total_views_day", align: "right", render: fmtInt },
@@ -115,29 +119,39 @@ export default function TeacherProgress() {
     <Row gutter={[16, 16]}>
       <Col xs={24} sm={8}><KpiCard label="SV đang học" loading={!s} value={fmtInt(s?.enrolled)} hint={s && `Số liệu ngày ${fmtDate(s.stat_date)}`} /></Col>
       <Col xs={24} sm={8}><KpiCard label="SV hoạt động 7 ngày qua" loading={!s} value={fmtInt(s?.active_students_7d)} hint={s && `${fmtPercent(s.enrolled ? (100 * s.active_students_7d) / s.enrolled : null)} lớp`} /></Col>
-      <Col xs={24} sm={8}><KpiCard label="Bài tập đã tới hạn" loading={!s} value={fmtInt(s?.total_assignments)} hint={s && `TB ${fmtDecimal(s.avg_access_per_student, 1)} lượt truy cập/SV`} /></Col>
+      <Col xs={24} sm={8}><KpiCard label="Bài tập, kiểm tra đã tới hạn" loading={!s} value={fmtInt(s?.total_assignments)} hint={s && `TB ${fmtDecimal(s.avg_access_per_student, 1)} lượt truy cập/SV`} /></Col>
 
       <Col xs={24} lg={10}>
         <Card title="Tiến độ lớp" loading={!s} style={{ height: "100%" }}>
           {s && (
             <>
-              <RateBar label="Hoàn thành hoạt động bắt buộc" value={s.avg_completion_rate} hint="Chưa có hoạt động theo dõi hoàn thành nào tới hạn" />
+              {hasCompletion && <RateBar label="Hoàn thành hoạt động bắt buộc" value={s.avg_completion_rate} hint="Chưa có hoạt động theo dõi hoàn thành nào tới hạn" />}
               <RateBar label="Nộp bài" value={s.submission_rate} hint="Chưa có bài tập nào tới hạn" />
-              <RateBar label="Chuyên cần" value={s.attendance_rate} hint="Môn chưa có buổi điểm danh" />
+              <RateBar label={d?.attendance_from_gradebook ? "Chuyên cần (theo sổ điểm, giá trị hiện tại)" : "Chuyên cần"}
+                value={s.attendance_rate} hint="Môn chưa có buổi điểm danh" />
             </>
           )}
         </Card>
       </Col>
       <Col xs={24} lg={14}>
-        <Card title="Tiến độ theo chương / tuần" loading={!d} style={{ height: "100%" }}>
-          {d && (d.sections.length ? d.sections.map((sec) => (
-            <div key={sec.section} style={{ display: "grid", gridTemplateColumns: "minmax(90px, 160px) 1fr 64px", gap: 12, alignItems: "center", marginBottom: 6 }}>
-              <span title={sec.name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.name}</span>
-              <Progress percent={Number(sec.completion_rate)} showInfo={false} strokeColor={SERIES.blue} trailColor="#e8eef8" size="small"
-                aria-label={`${sec.name}: hoàn thành ${fmtPercent(sec.completion_rate, 0)}`} />
-              <span className="tabular" style={{ textAlign: "right" }}>{fmtPercent(sec.completion_rate, 0)}</span>
+        <Card title={accessSections ? "Mức tiếp cận nội dung theo chương / tuần" : "Tiến độ theo chương / tuần"} loading={!d} style={{ height: "100%" }}>
+          {d && accessSections && (
+            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+              Tỷ lệ sinh viên đã mở ít nhất một nội dung của chương (theo nhật ký truy cập – chỉ có từ ngày đầu của nhật ký, nên với môn mở sớm hơn, các chương đầu có thể thấp hơn thực tế). Môn không theo dõi hoàn thành hoạt động.
             </div>
-          )) : <span className="muted">Chưa có hoạt động theo dõi hoàn thành nào tới hạn</span>)}
+          )}
+          {d && (d.sections.length ? d.sections.map((sec) => {
+            const value = accessSections ? sec.access_rate : sec.completion_rate;
+            const verb = accessSections ? "đã mở nội dung" : "hoàn thành";
+            return (
+              <div key={sec.section} style={{ display: "grid", gridTemplateColumns: "minmax(90px, 160px) 1fr 64px", gap: 12, alignItems: "center", marginBottom: 6 }}>
+                <span title={sec.name} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec.name}</span>
+                <Progress percent={Number(value)} showInfo={false} strokeColor={SERIES.blue} trailColor="#e8eef8" size="small"
+                  aria-label={`${sec.name}: ${verb} ${fmtPercent(value, 0)}`} />
+                <span className="tabular" style={{ textAlign: "right" }}>{fmtPercent(value, 0)}</span>
+              </div>
+            );
+          }) : <span className="muted">Chưa có hoạt động theo dõi hoàn thành nào tới hạn</span>)}
         </Card>
       </Col>
 
@@ -149,13 +163,14 @@ export default function TeacherProgress() {
         </ChartCard>
       </Col>
       <Col xs={24} xl={12}>
-        <ChartCard title="Tỷ lệ tiến độ theo thời gian" subtitle="Khoảng trống trên đường = chưa có dữ liệu để tính"
+        <ChartCard title="Tỷ lệ tiến độ theo thời gian"
+          subtitle={`Khoảng trống trên đường = chưa có dữ liệu để tính${d?.attendance_from_gradebook ? ". Chuyên cần lấy từ sổ điểm không có lịch sử nên không vẽ theo thời gian" : ""}`}
           extra={granularityControl} loading={progress.isLoading} error={progress.error} fetching={progress.isFetching}
           table={{ rowKey: "period", dataSource: d?.series ?? [], columns: tableColumns }}>
           {ratesChart && <Line data={ratesChart.data} options={ratesChart.options} plugins={[crosshair]} role="img" aria-label="Tỷ lệ tiến độ theo thời gian" />}
         </ChartCard>
       </Col>
-      <Col span={24}><span className="muted" style={{ color: CHROME.muted }}>Theo tuần: tỷ lệ và số SV hoạt động lấy tại ngày cuối mỗi tuần; tuần hiện tại tính tới hôm nay.</span></Col>
+      <Col span={24}><span className="muted" style={{ color: CHROME.muted }}>Theo tuần: tỷ lệ và số SV hoạt động lấy tại ngày cuối mỗi tuần; tuần hiện tại tính tới hôm nay.{d?.hidden_before ? ` Đồ thị bắt đầu từ ${dayjs(d.hidden_before).format("DD/MM/YYYY")}: những ngày trước đó nhật ký chưa đủ 7 ngày nên chưa tính được số SV hoạt động.` : ""}</span></Col>
     </Row>
   );
 }
