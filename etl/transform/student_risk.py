@@ -11,7 +11,7 @@ from datetime import datetime
 import pandas as pd
 
 from common.person_name import full_name
-from etl.config import TZ
+from etl.config import MIN_ATTENDANCE_DAYS, TZ
 from etl.extract.course_data import CourseDataset
 from etl.rules import default_params
 from etl.transform.risk_rules import score_student
@@ -36,7 +36,7 @@ RISK_COLUMNS = (
     "attendance_status", "total_assignments", "submitted_assignments", "missing_assignments_count",
     "late_submissions", "completion_rate", "score_attendance", "score_inactivity", "score_assignment",
     "risk_score", "risk_level", "risk_reasons", "weekly_activity", "assignment_detail", "class_avg_access",
-    "rule_set_id", "max_consecutive_missing", "attendance_detail", "attendance_source", "etl_run_id",
+    "rule_set_id", "max_consecutive_missing", "attendance_detail", "attendance_source", "attendance_days", "etl_run_id",
 )
 
 
@@ -113,6 +113,12 @@ def student_metrics(ds: CourseDataset) -> pd.DataFrame:
                .merge(completion, on=KEYS, how="left"))
     metrics[COUNT_COLUMNS] = metrics[COUNT_COLUMNS].fillna(0).astype("int64")
     metrics["attendance_source"] = metrics["attendance_source"].fillna("SESSIONS")
+    # Số ngày môn có điểm danh; chuyên cần theo sổ điểm của môn điểm danh dưới MIN_ATTENDANCE_DAYS ngày: C1 không
+    # áp dụng (đặt số buổi = 0 như môn không có điểm danh), vẫn ghi nguồn GRADEBOOK và số ngày để giao diện giải thích
+    days = dict(zip(ds.attendance_days["course_id"].astype(int), ds.attendance_days["attendance_days"].astype(int)))
+    metrics["attendance_days"] = [days.get(int(c), 0) for c in metrics["course_id"]]
+    few = (metrics["attendance_source"] == "GRADEBOOK") & (metrics["attendance_days"] < MIN_ATTENDANCE_DAYS)
+    metrics.loc[few, ["total_sessions", "attended_sessions", "absent_sessions"]] = 0
     metrics["missing_assignments_count"] = metrics["total_assignments"] - metrics["submitted_assignments"]
     return metrics
 
@@ -233,7 +239,7 @@ def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int,
             days_since_last_access=days_since, access_count_14d=m.access_count_14d,
             total_assignments=m.total_assignments, missing_assignments_count=m.missing_assignments_count,
             max_consecutive_missing=consecutive, attendance_detail=att_detail,
-            attendance_source=m.attendance_source, log_start=log_start,
+            attendance_source=m.attendance_source, attendance_days=int(m.attendance_days), log_start=log_start,
         ), float(class_median_14d[key[0]]), thresholds=params["thresholds"], weights=params["weights"],
             level_rules=params["level_rules"], extra_rules=params.get("extra_rules", ()))
 
@@ -270,6 +276,6 @@ def build_risk_rows(ds: CourseDataset, metrics: pd.DataFrame, run_id: int,
             weekly_activity=weekly_activity, assignment_detail=details,
             class_avg_access=round(float(class_avg_access[key[0]]), 2),
             rule_set_id=int(rule_set_id), max_consecutive_missing=consecutive, attendance_detail=att_detail,
-            attendance_source=m.attendance_source, etl_run_id=run_id,
+            attendance_source=m.attendance_source, attendance_days=int(m.attendance_days), etl_run_id=run_id,
         ))
     return rows

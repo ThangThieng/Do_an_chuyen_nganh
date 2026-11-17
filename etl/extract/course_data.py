@@ -13,6 +13,7 @@ from datetime import datetime
 import pandas as pd
 from sqlalchemy import Engine, text
 
+from common.settings import APP_TIMEZONE
 from etl.db import read_frame
 from etl.extract import load_sql
 from etl.transform.semester import academic_term, category_term, term_start
@@ -20,9 +21,10 @@ from etl.transform.semester import academic_term, category_term, term_start
 log = logging.getLogger(__name__)
 
 DATASET_QUERIES = ("enrolments", "interaction", "weekly_activity", "attendance", "assignments", "completion",
-                   "submissions_day", "attendance_grades", "section_access")
+                   "submissions_day", "attendance_grades", "section_access", "attendance_days")
 ATTENDANCE_GRADE_COLUMNS = ["course_id", "user_id", "attendance_id", "attendance_name", "points", "max_points"]
 SECTION_ACCESS_COLUMNS = ["course_id", "section_no", "section_name", "modules", "students_opened"]
+ATTENDANCE_DAYS_COLUMNS = ["course_id", "attendance_days"]
 
 # Cột epoch có thể NULL. Nếu MỌI dòng đều NULL (vd đầu học kỳ chưa có bài nộp), pandas suy ra kiểu object/None
 # thay vì số -> ép về kiểu số nguyên nullable Int64 để Transform luôn nhận cùng một kiểu dữ liệu.
@@ -48,6 +50,8 @@ class CourseDataset:
     attendance_grades: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(columns=ATTENDANCE_GRADE_COLUMNS))
     # Số SV đã mở nội dung theo chương – thay "hoàn thành theo chương" khi môn không có dữ liệu hoàn thành
     section_access: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(columns=SECTION_ACCESS_COLUMNS))
+    # Số ngày môn có điểm danh (nhật ký mod_attendance) – C1 theo sổ điểm chỉ chấm khi đủ MIN_ATTENDANCE_DAYS
+    attendance_days: pd.DataFrame = field(default_factory=lambda: pd.DataFrame(columns=ATTENDANCE_DAYS_COLUMNS))
     # Thời điểm của dòng log đầu tiên (dữ liệu thật: 13/09/2026) – để lý do cảnh báo nói rõ "từ ngày nào"
     log_start_ts: int | None = None
 
@@ -93,7 +97,7 @@ def start_of_day(moment: datetime) -> datetime:
 def extract_course_dataset(moodle: Engine, as_of: datetime) -> CourseDataset:
     day_start = start_of_day(as_of)
     params = {"as_of": int(as_of.timestamp()), "day_start": int(day_start.timestamp()),
-              "term_start": int(term_start(as_of).timestamp())}
+              "term_start": int(term_start(as_of).timestamp()), "tz": APP_TIMEZONE}
     with moodle.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
         courses = read_frame(conn, load_sql("courses"), params)
         warn_term_mismatch(courses)

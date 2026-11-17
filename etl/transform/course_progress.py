@@ -19,7 +19,8 @@ PROGRESS_COLUMNS = (
     "active_students_day", "active_students_7d", "total_active_students", "total_views_day",
     "total_actions_day", "submissions_day", "total_assignments", "assignment_submission_rate",
     "attendance_rate", "avg_completion_rate", "avg_access_per_student", "red_count", "yellow_count",
-    "green_count", "section_progress", "rule_set_id", "editing_teacher_ids", "course_start_date", "etl_run_id",
+    "green_count", "section_progress", "rule_set_id", "editing_teacher_ids", "course_start_date", "attendance_days",
+    "etl_run_id",
 )
 
 
@@ -39,6 +40,7 @@ def build_progress_rows(ds: CourseDataset, metrics: pd.DataFrame,
     sections = (ds.completion.groupby(["course_id", "section_no", "section_name"], as_index=False)
                 [["tracked_activities", "completed_activities"]].sum())
     metrics_by_course = {int(cid): group for cid, group in metrics.groupby("course_id")}
+    attendance_days = dict(zip(ds.attendance_days["course_id"].astype(int), ds.attendance_days["attendance_days"].astype(int)))
     sections_by_course = {int(cid): group for cid, group in sections.groupby("course_id")}
     access_by_course = {int(cid): group for cid, group in ds.section_access.groupby("course_id")}
     empty_metrics = metrics.iloc[0:0]
@@ -86,6 +88,7 @@ def build_progress_rows(ds: CourseDataset, metrics: pd.DataFrame,
             rule_set_id=rule_of.get(cid),
             editing_teacher_ids=[int(t) for t in getattr(c, "editing_teacher_ids", None) or []],
             course_start_date=datetime.fromtimestamp(int(c.startdate), TZ).date(),
+            attendance_days=attendance_days.get(cid, 0),
             etl_run_id=run_id,
         ))
     return rows

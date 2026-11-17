@@ -167,3 +167,28 @@ def test_rates_without_data_are_none_not_zero():
         assert (r["total_assignments"], r["completion_rate"], r["score_assignment"]) == (0, None, 0)
     [row] = build_progress_rows(ds, student_metrics(ds), {}, run_id=1)
     assert (row["attendance_rate"], row["assignment_submission_rate"], row["avg_completion_rate"]) == (None, None, None)
+
+
+def _gradebook_dataset(attendance_days: int):
+    """Môn không có buổi của plugin, chuyên cần lấy từ sổ điểm: SV 101 được 0/10 điểm danh (vắng 100%)."""
+    ds = dataset()
+    ds.attendance = ds.attendance.iloc[0:0]
+    ds.attendance_grades = pd.DataFrame([dict(course_id=10, user_id=101, attendance_id=1, attendance_name="Điểm danh",
+                                              points=0.0, max_points=10.0)])
+    ds.attendance_days = pd.DataFrame([dict(course_id=10, attendance_days=attendance_days)])
+    return ds
+
+
+def test_gradebook_attendance_with_too_few_days_is_not_scored():
+    """Môn mới điểm danh 1 ngày: vắng đúng buổi đó không bị chấm C1 (quyết định 17/11/2026, MIN_ATTENDANCE_DAYS = 3)."""
+    r = rows_by_user(_gradebook_dataset(1))[101]
+    assert (r["attendance_source"], r["total_sessions"], r["score_attendance"], r["attendance_days"]) == ("GRADEBOOK", 0, 0, 1)
+    assert not any("Chuyên cần" in x for x in r["risk_reasons"])
+    [row] = build_progress_rows(_gradebook_dataset(1), student_metrics(_gradebook_dataset(1)), {10: (0, 1, 1)}, run_id=1)
+    assert row["attendance_rate"] is None and row["attendance_days"] == 1
+
+
+def test_gradebook_attendance_with_enough_days_is_scored():
+    r = rows_by_user(_gradebook_dataset(3))[101]
+    assert (r["total_sessions"], r["absent_sessions"], r["score_attendance"]) == (100, 100, 2)
+    assert "Chuyên cần 0% theo sổ điểm (vắng 100%)" in r["risk_reasons"]

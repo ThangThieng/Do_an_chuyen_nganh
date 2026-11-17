@@ -13,7 +13,7 @@ def _write(directory: Path, name: str, content: str, newline: str = "\n") -> Non
 
 def test_real_analytics_migrations_are_valid():
     migrations = discover_migrations("analytics")
-    assert [m.version for m in migrations] == list(range(1, 17))     # V009–V014: v1.2; V015: nguồn chuyên cần; V016: ghi chú lịch học kỳ
+    assert [m.version for m in migrations] == list(range(1, 18))     # V009–V014: v1.2; V015: nguồn chuyên cần; V016: lịch học kỳ; V017: số ngày điểm danh
 
 
 def test_real_moodle_migrations_are_valid():

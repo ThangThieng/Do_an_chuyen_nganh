@@ -29,6 +29,10 @@ RISK_LEVEL_RULES: dict[str, int | bool] = dict(
     red_min_red_criteria=2,
     red_min_total=4,
 )
+# C1 lấy từ sổ điểm chỉ được chấm khi môn đã điểm danh ít nhất từng này ngày (đếm từ nhật ký mod_attendance).
+# Dữ liệu thật: 5 môn cả học kỳ chỉ điểm danh 1 ngày -> vắng đúng buổi đó bị chấm "vắng 100%" (quyết định 17/11/2026).
+MIN_ATTENDANCE_DAYS = 3
+
 # risk_score = round(100 × (0.35·C1 + 0.30·C2 + 0.35·C3) / 2)
 RISK_WEIGHTS: dict[str, float] = dict(attendance=0.35, inactivity=0.30, assignment=0.35)
 

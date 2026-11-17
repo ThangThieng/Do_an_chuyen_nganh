@@ -5,7 +5,7 @@
  */
 import { Input, Select, Space, Table, Tag, Tooltip } from "antd";
 import { CRITERIA, RISK, RISK_LEVELS } from "../theme/tokens.js";
-import { absenceCountText, fmtDaysSince, fmtInt, fmtPercent } from "../utils/format.js";
+import { absenceCountText, fewAttendanceDays, fmtDaysSince, fmtInt, fmtPercent } from "../utils/format.js";
 import { Rate, RiskBadge } from "./common.jsx";
 
 const SORT_FIELDS = {
@@ -44,7 +44,9 @@ export default function RiskStudentTable({ state, setState, data, loading, onOpe
     { title: "Họ tên", key: "student_name", dataIndex: "student_name", sorter: true, sortOrder: sortOrder("student_name") },
     {
       title: "Vắng", key: "absence_rate", sorter: true, sortOrder: sortOrder("absence_rate"), align: "right",
-      render: (_, r) => (r.total_sessions ? <span className="tabular">{fmtPercent(r.absence_rate, 0)} <span className="muted">({absenceCountText(r)})</span></span> : <Rate value={null} />),
+      render: (_, r) => (r.total_sessions ? <span className="tabular">{fmtPercent(r.absence_rate, 0)} <span className="muted">({absenceCountText(r)})</span></span>
+        : fewAttendanceDays(r) ? <span className="muted" title="Môn điểm danh dưới 3 buổi: chưa tính chuyên cần">Mới điểm danh {r.attendance_days} buổi</span>
+          : <Rate value={null} />),
     },
     {
       title: "Hoạt động cuối", key: "days_since_last_access", dataIndex: "days_since_last_access", sorter: true,

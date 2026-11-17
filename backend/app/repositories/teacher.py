@@ -89,6 +89,7 @@ TIE_BREAKER = "student_code NULLS LAST, user_id"
 STUDENT_LIST_COLUMNS = """user_id, student_code, student_name, email, risk_level, risk_score, risk_reasons,
        score_attendance, score_inactivity, score_assignment,
        total_sessions, attended_sessions, absent_sessions, absence_rate, attendance_status, attendance_source,
+       attendance_days,
        total_assignments, submitted_assignments, missing_assignments_count, late_submissions, completion_rate,
        total_access_count, access_count_7d, access_count_14d, last_access_time, days_since_last_access,
        max_consecutive_missing, rule_set_id"""
@@ -177,7 +178,7 @@ PROGRESS_METRICS = """total_enrolled_students AS enrolled, active_students_day, 
 
 def progress_latest(conn: Connection, course_id: int, teacher_id: int, today: date) -> dict | None:
     return fetch_one(conn, f"""
-        SELECT stat_date, {PROGRESS_METRICS}, section_progress
+        SELECT stat_date, {PROGRESS_METRICS}, section_progress, attendance_days
         FROM analytics.fact_course_progress_daily
         WHERE course_id = :course_id AND stat_date <= :today AND {TEACHER_FILTER}
         ORDER BY stat_date DESC LIMIT 1""", {"course_id": course_id, "today": today, "teacher_id": teacher_id})

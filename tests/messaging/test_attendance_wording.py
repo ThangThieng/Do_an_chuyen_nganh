@@ -50,3 +50,11 @@ def test_composer_notice_only_when_session_variables_meet_gradebook():
     assert session_variable_notice("Nhắc", body, [GRADEBOOK, SESSIONS]) is not None
     assert session_variable_notice("Nhắc", body, [SESSIONS]) is None
     assert session_variable_notice("Nhắc", "Chuyên cần: {chuyen_can}", [GRADEBOOK]) is None
+
+
+def test_too_few_attendance_days_wording():
+    from common import attendance_text
+    r = {"attendance_source": "GRADEBOOK", "total_sessions": 0, "absent_sessions": 0, "attendance_days": 1}
+    assert attendance_text.summary(r) == "môn mới điểm danh 1 buổi, chưa tính chuyên cần"
+    assert attendance_text.message_phrase(r) == "môn mới điểm danh 1 buổi, chưa tính chuyên cần"
+    assert attendance_text.summary({**r, "attendance_days": None}) == "chưa có dữ liệu điểm danh"

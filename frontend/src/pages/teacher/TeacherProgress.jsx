@@ -128,7 +128,9 @@ export default function TeacherProgress() {
               {hasCompletion && <RateBar label="Hoàn thành hoạt động bắt buộc" value={s.avg_completion_rate} hint="Chưa có hoạt động theo dõi hoàn thành nào tới hạn" />}
               <RateBar label="Nộp bài" value={s.submission_rate} hint="Chưa có bài tập nào tới hạn" />
               <RateBar label={d?.attendance_from_gradebook ? "Chuyên cần (theo sổ điểm, giá trị hiện tại)" : "Chuyên cần"}
-                value={s.attendance_rate} hint="Môn chưa có buổi điểm danh" />
+                value={s.attendance_rate}
+                hint={d?.attendance_from_gradebook && s.attendance_days != null && s.attendance_rate == null
+                  ? `Môn mới điểm danh ${s.attendance_days} buổi – cần từ 3 buổi mới tính chuyên cần` : "Môn chưa có buổi điểm danh"} />
             </>
           )}
         </Card>

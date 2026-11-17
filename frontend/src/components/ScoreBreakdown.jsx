@@ -4,7 +4,7 @@
  * Ngưỡng/trọng số lấy từ API (/meta/risk-rule) – cùng luật mà ETL đã dùng để chấm.
  */
 import { Table, Tag } from "antd";
-import { fmtDecimal, isGradebookAttendance } from "../utils/format.js";
+import { fewAttendanceDays, fmtDecimal, isGradebookAttendance } from "../utils/format.js";
 import { RiskBadge } from "./common.jsx";
 
 const pct = (v) => `${Math.round(Number(v) * 1000) / 10}%`;
@@ -24,7 +24,8 @@ export default function ScoreBreakdown({ s, rule }) {
   const rows = [
     {
       key: "c1", name: "C1 – Vắng học", score: s.score_attendance, weight: w.attendance,
-      actual: absence == null ? "chưa có buổi điểm danh"
+      actual: absence == null
+        ? (fewAttendanceDays(s) ? `môn mới điểm danh ${s.attendance_days} buổi (cần từ 3 buổi mới tính)` : "chưa có buổi điểm danh")
         : isGradebookAttendance(s) ? `vắng ${pct(absence)} (chuyên cần ${s.attended_sessions}% theo sổ điểm)`
           : `vắng ${s.absent_sessions}/${s.total_sessions} buổi = ${pct(absence)}`,
       applies: absence != null,

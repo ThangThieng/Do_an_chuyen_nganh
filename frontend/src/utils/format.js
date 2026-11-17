@@ -95,6 +95,11 @@ export function isGradebookAttendance(row) {
   return row?.attendance_source === "GRADEBOOK" || row?.source === "GRADEBOOK";
 }
 
+/** Chuyên cần theo sổ điểm nhưng môn mới điểm danh dưới 3 buổi: chưa tính C1 (ETL đặt số buổi = 0). */
+export function fewAttendanceDays(row) {
+  return isGradebookAttendance(row) && !row?.total_sessions && row?.attendance_days != null;
+}
+
 /** "3/12 buổi" với dữ liệu theo buổi; "theo sổ điểm" khi số liệu là tỷ lệ quy đổi. */
 export function absenceCountText(row, unit = "") {
   if (isGradebookAttendance(row)) return "theo sổ điểm";

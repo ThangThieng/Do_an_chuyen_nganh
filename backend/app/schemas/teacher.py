@@ -71,6 +71,7 @@ class RiskStudent(BaseModel):
     absence_rate: float | None                 # None = chưa có buổi điểm danh
     attendance_status: str
     attendance_source: str = "SESSIONS"         # GRADEBOOK = tỷ lệ quy đổi từ sổ điểm (thang 100), không phải số buổi
+    attendance_days: int | None = None         # số ngày môn có điểm danh; GRADEBOOK + total_sessions = 0 = quá ít, chưa chấm C1
     total_assignments: int
     submitted_assignments: int
     missing_assignments_count: int
@@ -199,6 +200,7 @@ class ProgressSummary(BaseModel):
     avg_completion_rate: float | None
     submission_rate: float | None
     attendance_rate: float | None
+    attendance_days: int | None = None         # số ngày môn có điểm danh (chuyên cần sổ điểm dưới 3 ngày: chưa tính)
     avg_access_per_student: float
     red: int
     yellow: int

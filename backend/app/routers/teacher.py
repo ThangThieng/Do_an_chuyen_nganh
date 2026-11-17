@@ -155,6 +155,7 @@ def progress(access: CourseAccess = Depends(course_access), granularity: Literal
         "active_students_7d": latest["active_students_7d"], "total_active_students": latest["total_active_students"],
         "total_assignments": latest["total_assignments"], "avg_completion_rate": latest["avg_completion_rate"],
         "submission_rate": latest["assignment_submission_rate"], "attendance_rate": latest["attendance_rate"],
+        "attendance_days": latest["attendance_days"],
         "avg_access_per_student": latest["avg_access_per_student"],
         "red": latest["red_count"], "yellow": latest["yellow_count"], "green": latest["green_count"],
     }

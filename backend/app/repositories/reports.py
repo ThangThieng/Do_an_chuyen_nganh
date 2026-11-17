@@ -187,7 +187,9 @@ def _risk(f: ReportFilters, today: date) -> ReportQuery:
                f.student_code, f.student_name, f.email, f.risk_level, f.risk_score,
                {LEVEL_RANK.replace('risk_level', 'f.risk_level')} AS level_rank,
                f.absence_rate, f.attended_sessions, f.total_sessions,
-               CASE WHEN f.attendance_source = 'GRADEBOOK' THEN f.attended_sessions || '% (sổ điểm)'
+               CASE WHEN f.attendance_source = 'GRADEBOOK' AND f.total_sessions = 0
+                         THEN 'môn mới điểm danh ' || COALESCE(f.attendance_days, 0) || ' buổi'
+                    WHEN f.attendance_source = 'GRADEBOOK' THEN f.attended_sessions || '% (sổ điểm)'
                     ELSE f.attended_sessions || '/' || f.total_sessions END AS attendance_ratio,
                f.missing_assignments_count, f.total_assignments,
                f.missing_assignments_count || '/' || f.total_assignments AS missing_ratio,

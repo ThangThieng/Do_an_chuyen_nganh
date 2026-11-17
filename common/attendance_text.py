@@ -25,6 +25,15 @@ def has_attendance(r: Mapping) -> bool:
     return _counts(r)[0] > 0
 
 
+def too_few_days(r: Mapping) -> bool:
+    """Chuyên cần theo sổ điểm nhưng môn mới điểm danh quá ít ngày nên C1 không chấm (số buổi đặt 0)."""
+    return is_gradebook(r) and not has_attendance(r) and r.get("attendance_days") is not None
+
+
+def few_days_text(r: Mapping) -> str:
+    return f"môn mới điểm danh {int(r.get('attendance_days') or 0)} buổi, chưa tính chuyên cần"
+
+
 def risk_reason(r: Mapping) -> str:
     """Lý do C1 trong bảng cảnh báo, ví dụ 'Vắng 3/15 buổi (20%)' hoặc 'Chuyên cần 75% theo sổ điểm (vắng 25%)'."""
     total, absent = _counts(r)
@@ -36,6 +45,8 @@ def risk_reason(r: Mapping) -> str:
 def message_phrase(r: Mapping) -> str:
     """Câu cho tin nhắn gửi sinh viên (ngôi thứ hai), ví dụ 'em đã vắng 3/15 buổi (20%)'."""
     total, absent = _counts(r)
+    if too_few_days(r):
+        return few_days_text(r)
     if not total:
         return "môn chưa có dữ liệu điểm danh"
     if is_gradebook(r):
@@ -46,6 +57,8 @@ def message_phrase(r: Mapping) -> str:
 def summary(r: Mapping) -> str:
     """Giá trị biến {chuyen_can}: dùng được cho cả hai nguồn."""
     total, absent = _counts(r)
+    if too_few_days(r):
+        return few_days_text(r)
     if not total:
         return "chưa có dữ liệu điểm danh"
     if is_gradebook(r):

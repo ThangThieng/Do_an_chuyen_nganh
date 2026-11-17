@@ -23,7 +23,8 @@ Phiên bản hiện tại: **1.2** (10/2026).
 - 17/11/2026: chỉnh các chức năng cho khớp dữ liệu thật: dữ liệu chỉ có một khoa nên so sánh và lọc theo **bộ môn /
   chuyên ngành**; biểu đồ **Giờ đông / giờ vắng**; tiêu chí cảnh báo tính đúng với bài giao theo nhóm, tài liệu đăng bằng
   hoạt động Bài tập và nhật ký chỉ có từ 13/09; sửa thứ tự họ tên; bỏ môn không có giảng viên; kiểm thử chạy trên bản sao
-  CSDL. Danh sách đầy đủ và lý do: [SPEC/BAO_CAO_TIEN_DO.md](SPEC/BAO_CAO_TIEN_DO.md) mục 3.9 (dòng 108–127).
+  CSDL; môn mới điểm danh dưới 3 buổi chưa tính chuyên cần. Danh sách đầy đủ và lý do:
+  [SPEC/BAO_CAO_TIEN_DO.md](SPEC/BAO_CAO_TIEN_DO.md) mục 3.9 (dòng 108–128).
 
 ```
 CSV Moodle 3.11 --ingest--> moodle_src_real --ETL Python--> lms_analytics_real --FastAPI--> React + Chart.js
@@ -718,7 +719,7 @@ Sau khi `git clone`, hệ thống **chưa chạy được ngay**. Những thứ 
 ### Kiểm tra dữ liệu đã nạp đúng
 
 Sau khi chạy `ingest` và `etl-backfill` với đợt dữ liệu 11/2026, ngày 12/11/2026 phải có 38 môn đang tính, 2.249 lượt ghi
-danh (1.164 sinh viên) và phân bố mức rủi ro: Nguy cơ cao 746, Cần lưu ý 747, An toàn 756.
+danh (1.164 sinh viên) và phân bố mức rủi ro: Nguy cơ cao 751, Cần lưu ý 721, An toàn 777.
 
 ```powershell
 python -c "import sys; sys.path.insert(0,'.'); import psycopg; from database.config import load_db_config; conn=psycopg.connect(**load_db_config('ANALYTICS_DB').conninfo()); print(conn.execute(\"SELECT risk_level, count(*) FROM analytics.fact_student_risk_summary WHERE snapshot_date='2026-11-12' GROUP BY 1 ORDER BY 1\").fetchall())"
@@ -839,8 +840,9 @@ nằm ở [etl/config.py](etl/config.py):
 
 Cách lấy số liệu trên dữ liệu thật:
 
-- **C1**: theo buổi điểm danh nếu có, không thì theo điểm chuyên cần trong sổ điểm. Môn không có cả hai: tiêu chí không áp
-  dụng (không tính vào điểm, các tiêu chí còn lại được chia lại trọng số).
+- **C1**: theo buổi điểm danh nếu có, không thì theo điểm chuyên cần trong sổ điểm. Môn không có cả hai, hoặc môn lấy từ
+  sổ điểm mà mới điểm danh dưới 3 ngày: tiêu chí không áp dụng (không tính vào điểm, các tiêu chí còn lại được chia lại
+  trọng số).
 - **C2**: "hoạt động cuối" là mốc muộn nhất giữa nhật ký truy cập, lần nộp bài và lần làm bài kiểm tra (nhật ký chỉ có từ
   13/09/2026 trong khi nhiều môn mở từ tháng 8).
 - **C3**: gồm bài tập và bài kiểm tra có hạn; bài chỉ giao cho một nhóm thì chỉ tính cho sinh viên trong nhóm; mục đã tới hạn
